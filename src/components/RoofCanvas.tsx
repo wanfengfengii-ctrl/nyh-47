@@ -1,10 +1,10 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { Stage, Layer, Rect, Line } from 'react-konva';
-import { Card, Group as MantineGroup, Text, ActionIcon, Tooltip, Alert } from '@mantine/core';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { Stage, Layer, Rect, Line, Text as KonvaText } from 'react-konva';
+import { Card, Group as MantineGroup, Text, ActionIcon, Tooltip, Alert, Switch } from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
 import { getRoofBoundaryPoints, isPointInRoof, validateSingleTileAdjustment } from '@/utils/roofCalculator';
 import type { Tile } from '@/types';
-import { IconZoomIn, IconZoomOut, IconZoomCancel, IconAlertTriangle } from '@tabler/icons-react';
+import { IconZoomIn, IconZoomOut, IconZoomCancel, IconAlertTriangle, IconListNumbers, IconEye, IconEyeOff } from '@tabler/icons-react';
 import Konva from 'konva';
 
 const STAGE_PADDING = 40;
@@ -13,7 +13,7 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 5;
 
 export default function RoofCanvas() {
-  const { roof, layout, selectedTileId, setSelectedTile, setManualAdjustment, tiles, validationResult, lastValidationMessage } = useRoofStore();
+  const { roof, layout, selectedTileId, setSelectedTile, setManualAdjustment, tiles, validationResult, lastValidationMessage, showTileNumbers, toggleShowTileNumbers, numberingResult, highlightedStepNumber, constructionSequence } = useRoofStore();
   const stageRef = useRef<Konva.Stage>(null);
   const [scale, setScale] = useState(1);
   const [stageSize, setStageSize] = useState({ width: 600, height: 500 });
@@ -22,6 +22,24 @@ export default function RoofCanvas() {
 
   const boundaryPoints = getRoofBoundaryPoints(roof);
   const boundaryFlatPoints = boundaryPoints.flatMap((p) => [p.x, p.y]);
+
+  const highlightedTileIds = useMemo(() => {
+    if (highlightedStepNumber === null) return new Set<string>();
+    const step = constructionSequence.steps.find(s => s.stepNumber === highlightedStepNumber);
+    return step ? new Set(step.tileIds) : new Set<string>();
+  }, [highlightedStepNumber, constructionSequence.steps]);
+
+  const cutTypeLabel = (tile: Tile): string => {
+    if (!tile.isCut) return '';
+    switch (tile.cutType) {
+      case 'left': return '◀';
+      case 'right': return '▶';
+      case 'top': return '▲';
+      case 'bottom': return '▼';
+      case 'both': return '◀▶';
+      default: return '✂';
+    }
+  };
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -144,6 +162,7 @@ export default function RoofCanvas() {
   const getTileFill = (tile: Tile) => {
     if (validationResult.invalidTileIds.includes(tile.id)) return '#ef4444';
     if (tile.id === selectedTileId) return '#3b82f6';
+    if (highlightedTileIds.has(tile.id)) return '#10b981';
     if (tile.manuallyAdjusted) return '#8b5cf6';
     if (tile.isCut) return '#f59e0b';
     return tiles.tileType === 'round' ? '#8b4513' : '#a0522d';
@@ -152,18 +171,23 @@ export default function RoofCanvas() {
   const getTileStroke = (tile: Tile) => {
     if (validationResult.invalidTileIds.includes(tile.id)) return '#b91c1c';
     if (tile.id === selectedTileId) return '#1d4ed8';
+    if (highlightedTileIds.has(tile.id)) return '#059669';
     if (tile.manuallyAdjusted) return '#7c3aed';
+    if (tile.isCut) return '#d97706';
     return '#5c2e0e';
   };
 
   const getTileStrokeWidth = (tile: Tile) => {
     if (validationResult.invalidTileIds.includes(tile.id)) return 3;
-    if (tile.id === selectedTileId) return 1;
+    if (tile.id === selectedTileId) return 2;
+    if (highlightedTileIds.has(tile.id)) return 3;
+    if (tile.isCut) return 2;
     return 1;
   };
 
   const getTileShadowColor = (tile: Tile) => {
     if (validationResult.invalidTileIds.includes(tile.id)) return 'rgba(239,68,68,0.5)';
+    if (highlightedTileIds.has(tile.id)) return 'rgba(16,185,129,0.5)';
     return 'rgba(0,0,0,0.1)';
   };
 
@@ -190,9 +214,30 @@ export default function RoofCanvas() {
             缩放: {(scale * 100).toFixed(0)}%
           </Text>
         </MantineGroup>
-        <Text size="sm" c="dimmed">
-          点击瓦片可选中，拖拽可调整位置
-        </Text>
+        <MantineGroup gap="md">
+          <MantineGroup gap="xs">
+            <IconListNumbers size={16} />
+            <Switch
+              size="sm"
+              checked={showTileNumbers}
+              onChange={toggleShowTileNumbers}
+              offLabel={
+                <ActionIcon size="xs" variant="transparent" color="gray">
+                  <IconEyeOff size={12} />
+                </ActionIcon>
+              }
+              onLabel={
+                <ActionIcon size="xs" variant="transparent" color="white">
+                  <IconEye size={12} />
+                </ActionIcon>
+              }
+            />
+            <Text size="xs" c="dimmed">编号</Text>
+          </MantineGroup>
+          <Text size="sm" c="dimmed">
+            点击瓦片可选中，拖拽可调整位置
+          </Text>
+        </MantineGroup>
       </Card.Section>
 
       {!validationResult.isValid && (
@@ -259,25 +304,60 @@ export default function RoofCanvas() {
               closed
             />
 
-            {layout.tiles.map((tile) => (
-              <Rect
-                key={tile.id}
-                x={tile.x}
-                y={tile.y}
-                width={tile.width}
-                height={tile.height}
-                fill={getTileFill(tile)}
-                stroke={getTileStroke(tile)}
-                strokeWidth={getTileStrokeWidth(tile)}
-                draggable
-                onClick={() => handleTileClick(tile)}
-                onDragEnd={(e) => handleDragEnd(e, tile)}
-                shadowColor={getTileShadowColor(tile)}
-                shadowBlur={validationResult.invalidTileIds.includes(tile.id) ? 8 : 2}
-                shadowOffsetX={1}
-                shadowOffsetY={1}
-              />
-            ))}
+            {layout.tiles.map((tile) => {
+              const numbering = numberingResult.numberingMap[tile.id];
+              const fontSize = Math.max(8, Math.min(tile.width / 6, 14));
+              return (
+                <React.Fragment key={tile.id}>
+                  <Rect
+                    x={tile.x}
+                    y={tile.y}
+                    width={tile.width}
+                    height={tile.height}
+                    fill={getTileFill(tile)}
+                    stroke={getTileStroke(tile)}
+                    strokeWidth={getTileStrokeWidth(tile)}
+                    draggable
+                    onClick={() => handleTileClick(tile)}
+                    onDragEnd={(e) => handleDragEnd(e, tile)}
+                    shadowColor={getTileShadowColor(tile)}
+                    shadowBlur={validationResult.invalidTileIds.includes(tile.id) || highlightedTileIds.has(tile.id) ? 8 : 2}
+                    shadowOffsetX={1}
+                    shadowOffsetY={1}
+                  />
+                  {showTileNumbers && tile.width > 20 && tile.height > 20 && (
+                    <>
+                      <KonvaText
+                        x={tile.x}
+                        y={tile.y + 2}
+                        width={tile.width}
+                        text={numbering ? `${numbering.rowNumber}-${numbering.colNumber}` : ''}
+                        fontSize={fontSize}
+                        fontStyle="bold"
+                        fill="#ffffff"
+                        align="center"
+                        shadowColor="rgba(0,0,0,0.8)"
+                        shadowBlur={2}
+                      />
+                      {tile.isCut && (
+                        <KonvaText
+                          x={tile.x}
+                          y={tile.y + tile.height - fontSize - 2}
+                          width={tile.width}
+                          text={cutTypeLabel(tile)}
+                          fontSize={fontSize}
+                          fontStyle="bold"
+                          fill="#fff176"
+                          align="center"
+                          shadowColor="rgba(0,0,0,0.8)"
+                          shadowBlur={2}
+                        />
+                      )}
+                    </>
+                  )}
+                </React.Fragment>
+              );
+            })}
 
             {selectedTileId && (
               <Rect

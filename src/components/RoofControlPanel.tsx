@@ -2,6 +2,7 @@ import { Card, Group, NumberInput, Select, Stack, Text } from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
 import { validateRoofParams } from '@/utils/roofCalculator';
 import { IconHome } from '@tabler/icons-react';
+import { type RoofShape } from '@/types';
 
 export default function RoofControlPanel() {
   const { roof, setRoof } = useRoofStore();
@@ -22,7 +23,7 @@ export default function RoofControlPanel() {
           <Select
             label="屋面形状"
             value={roof.shape}
-            onChange={(value) => setRoof({ shape: value as any })}
+            onChange={(value) => setRoof({ shape: value as RoofShape })}
             data={[
               { value: 'rectangle', label: '矩形' },
               { value: 'trapezoid', label: '梯形' },

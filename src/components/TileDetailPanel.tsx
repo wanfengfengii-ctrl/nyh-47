@@ -4,16 +4,50 @@ import { IconSquare, IconRefresh, IconAlertTriangle, IconHome } from '@tabler/ic
 import { useState, useCallback, useEffect } from 'react';
 
 export default function TileDetailPanel() {
-  const { roof, layout, selectedTileId, setManualAdjustment, manualAdjustments, clearManualAdjustment, resetTileToOriginal, originalPositions, validationResult, tiles, lastValidationMessage } = useRoofStore();
+  const { roof, layout, selectedTileId, setManualAdjustment, manualAdjustments, clearManualAdjustment, resetTileToOriginal, originalPositions, validationResult, tiles, numberingResult } = useRoofStore();
   const [inputErrorMessage, setInputErrorMessage] = useState('');
-
-  const selectedTile = layout.tiles.find((t) => t.id === selectedTileId);
 
   useEffect(() => {
     if (!selectedTileId) {
       setInputErrorMessage('');
     }
   }, [selectedTileId]);
+
+  const showTempError = useCallback((msg: string) => {
+    setInputErrorMessage(msg);
+    setTimeout(() => {
+      setInputErrorMessage('');
+    }, 3000);
+  }, []);
+
+  const selectedTile = layout.tiles.find((t) => t.id === selectedTileId);
+
+  const adjustment = selectedTile ? manualAdjustments[selectedTile.id] : undefined;
+  const originalPos = selectedTile ? originalPositions[selectedTile.id] : undefined;
+  const displayX = adjustment?.x ?? selectedTile?.x ?? 0;
+  const displayY = adjustment?.y ?? selectedTile?.y ?? 0;
+
+  const handleXChange = useCallback((value: number | string) => {
+    if (!selectedTileId) return;
+    const num = Number(value) || 0;
+    const result = setManualAdjustment(selectedTileId, num, displayY);
+    if (!result.success) {
+      showTempError(result.message);
+    } else {
+      setInputErrorMessage('');
+    }
+  }, [selectedTileId, displayY, setManualAdjustment, showTempError]);
+
+  const handleYChange = useCallback((value: number | string) => {
+    if (!selectedTileId) return;
+    const num = Number(value) || 0;
+    const result = setManualAdjustment(selectedTileId, displayX, num);
+    if (!result.success) {
+      showTempError(result.message);
+    } else {
+      setInputErrorMessage('');
+    }
+  }, [selectedTileId, displayX, setManualAdjustment, showTempError]);
 
   if (!selectedTile) {
     return (
@@ -33,42 +67,12 @@ export default function TileDetailPanel() {
     );
   }
 
-  const adjustment = manualAdjustments[selectedTile.id];
-  const originalPos = originalPositions[selectedTile.id];
-  const displayX = adjustment?.x ?? selectedTile.x;
-  const displayY = adjustment?.y ?? selectedTile.y;
   const hasViolation = validationResult.invalidTileIds.includes(selectedTile.id);
   const tileViolations = validationResult.violations.filter(v => v.tileId === selectedTile.id);
+  const tileNumbering = numberingResult.numberingMap[selectedTile.id];
 
   const maxX = Math.max(0, roof.width - selectedTile.width);
   const maxY = Math.max(0, roof.height - selectedTile.height);
-
-  const showTempError = useCallback((msg: string) => {
-    setInputErrorMessage(msg);
-    setTimeout(() => {
-      setInputErrorMessage('');
-    }, 3000);
-  }, []);
-
-  const handleXChange = useCallback((value: number | string) => {
-    const num = Number(value) || 0;
-    const result = setManualAdjustment(selectedTile.id, num, displayY);
-    if (!result.success) {
-      showTempError(result.message);
-    } else {
-      setInputErrorMessage('');
-    }
-  }, [selectedTile.id, displayY, setManualAdjustment, showTempError]);
-
-  const handleYChange = useCallback((value: number | string) => {
-    const num = Number(value) || 0;
-    const result = setManualAdjustment(selectedTile.id, displayX, num);
-    if (!result.success) {
-      showTempError(result.message);
-    } else {
-      setInputErrorMessage('');
-    }
-  }, [selectedTile.id, displayX, setManualAdjustment, showTempError]);
 
   const handleReset = () => {
     clearManualAdjustment(selectedTile.id);
@@ -121,13 +125,40 @@ export default function TileDetailPanel() {
           <Group grow>
             <div>
               <Text size="sm" c="dimmed">瓦片编号</Text>
-              <Text fw={600}>{selectedTile.id}</Text>
+              <Text fw={600} c="blue">{tileNumbering?.displayNumber || selectedTile.id}</Text>
             </div>
             <div>
               <Text size="sm" c="dimmed">行列</Text>
-              <Text fw={600}>第{selectedTile.row}行 第{selectedTile.col}列</Text>
+              <Text fw={600}>第{selectedTile.row + 1}行 第{selectedTile.col + 1}列</Text>
             </div>
           </Group>
+          {tileNumbering && (
+            <Group grow>
+              <div>
+                <Text size="sm" c="dimmed">全局序号</Text>
+                <Text fw={600}>#{tileNumbering.globalSequence}</Text>
+              </div>
+              <div>
+                <Text size="sm" c="dimmed">坡面编号</Text>
+                <Text fw={600}>S{tileNumbering.slopeNumber}</Text>
+              </div>
+            </Group>
+          )}
+          {selectedTile.isCut && selectedTile.cutType && (
+            <Group grow>
+              <div>
+                <Text size="sm" c="dimmed">裁切方式</Text>
+                <Text fw={600} c="orange">
+                  {selectedTile.cutType === 'left' ? '左裁切'
+                    : selectedTile.cutType === 'right' ? '右裁切'
+                    : selectedTile.cutType === 'top' ? '上裁切'
+                    : selectedTile.cutType === 'bottom' ? '下裁切'
+                    : selectedTile.cutType === 'both' ? '双侧裁切'
+                    : '裁切'}
+                </Text>
+              </div>
+            </Group>
+          )}
 
           <Group grow>
             <div>

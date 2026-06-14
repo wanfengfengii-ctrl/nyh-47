@@ -35,11 +35,11 @@ export default function LegendPanel() {
               h={16}
               style={{
                 backgroundColor: '#f59e0b',
-                border: '1px solid #5c2e0e',
+                border: '2px solid #d97706',
                 borderRadius: 2,
               }}
             />
-            <Text size="sm">裁切瓦</Text>
+            <Text size="sm">裁切瓦（粗边框）</Text>
           </Group>
           <Group gap="sm">
             <Box
@@ -52,6 +52,19 @@ export default function LegendPanel() {
               }}
             />
             <Text size="sm">已手动调整</Text>
+          </Group>
+          <Group gap="sm">
+            <Box
+              w={24}
+              h={16}
+              style={{
+                backgroundColor: '#10b981',
+                border: '3px solid #059669',
+                borderRadius: 2,
+                boxShadow: '0 0 8px rgba(16,185,129,0.5)',
+              }}
+            />
+            <Text size="sm">施工步骤高亮</Text>
           </Group>
           <Group gap="sm">
             <Box

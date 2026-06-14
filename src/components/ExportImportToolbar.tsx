@@ -1,15 +1,29 @@
 import { useRef, useState } from 'react';
-import { Group, Button, Tooltip, Alert, Modal, Stack, Text, Badge } from '@mantine/core';
+import { Group, Button, Tooltip, Alert, Modal, Stack, Text, Badge, Menu } from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { IconDownload, IconUpload, IconFileExport, IconAlertTriangle, IconCircleCheck } from '@tabler/icons-react';
+import { IconDownload, IconUpload, IconFileExport, IconAlertTriangle, IconCircleCheck, IconPrinter, IconFileText, IconChevronDown } from '@tabler/icons-react';
 import type { ProjectData } from '@/types';
 
 export default function ExportImportToolbar() {
-  const { exportProject, importProject, importValidationResult, clearImportValidation } = useRoofStore();
+  const { exportProject, importProject, importValidationResult, clearImportValidation, exportConstructionListHTML, printConstructionList, exportConstructionListJSON } = useRoofStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [importSuccess, setImportSuccess] = useState(false);
+
+  const handleExportConstructionListJSON = () => {
+    const data = exportConstructionListJSON();
+    const jsonStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `施工清单_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const handleExport = () => {
     const data = exportProject();
@@ -74,6 +88,42 @@ export default function ExportImportToolbar() {
           导出方案
         </Button>
       </Tooltip>
+
+      <Menu shadow="md" width={200} position="bottom-end">
+        <Menu.Target>
+          <Button
+            leftSection={<IconFileExport size={18} />}
+            rightSection={<IconChevronDown size={14} />}
+            variant="light"
+            color="teal"
+            size="sm"
+          >
+            施工清单
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Label>导出施工清单</Menu.Label>
+          <Menu.Item
+            leftSection={<IconPrinter size={16} />}
+            onClick={printConstructionList}
+          >
+            打印施工清单
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<IconFileText size={16} />}
+            onClick={exportConstructionListHTML}
+          >
+            导出 HTML (可打印)
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<IconDownload size={16} />}
+            onClick={handleExportConstructionListJSON}
+          >
+            导出 JSON 数据
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+
       <Tooltip label="导入方案">
         <Button
           leftSection={<IconUpload size={18} />}

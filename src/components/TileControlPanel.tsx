@@ -2,6 +2,7 @@ import { Card, Group, NumberInput, Select, Stack, Text } from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
 import { validateTileParams } from '@/utils/roofCalculator';
 import { IconLayoutGrid } from '@tabler/icons-react';
+import { type TileParams } from '@/types';
 
 export default function TileControlPanel() {
   const { tiles, setTiles } = useRoofStore();
@@ -22,7 +23,7 @@ export default function TileControlPanel() {
           <Select
             label="瓦型"
             value={tiles.tileType}
-            onChange={(value) => setTiles({ tileType: value as any })}
+            onChange={(value) => setTiles({ tileType: value as TileParams['tileType'] })}
             data={[
               { value: 'round', label: '筒瓦' },
               { value: 'flat', label: '板瓦' },

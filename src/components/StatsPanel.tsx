@@ -3,7 +3,7 @@ import { useRoofStore } from '@/store/roofStore';
 import { IconChartBar, IconAlertTriangle, IconTrash, IconCircleCheck, IconAlertCircle } from '@tabler/icons-react';
 
 export default function StatsPanel() {
-  const { layout, wasteThreshold, showWasteWarning, setWasteThreshold, clearManualAdjustments, manualAdjustments, validationResult, validateLayout, lastValidationMessage } = useRoofStore();
+  const { layout, wasteThreshold, showWasteWarning, setWasteThreshold, clearManualAdjustments, manualAdjustments, validationResult, validateLayout } = useRoofStore();
 
   const wastePercent = (layout.wasteRate * 100).toFixed(2);
   const thresholdPercent = (wasteThreshold * 100).toFixed(0);

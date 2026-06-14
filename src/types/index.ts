@@ -76,3 +76,78 @@ export interface TileWithOriginal extends Tile {
   originalX: number;
   originalY: number;
 }
+
+export type NumberingScheme = 'slope-row-col' | 'row-col' | 'snake-row';
+
+export type ConstructionDirection = 'bottom-up' | 'top-down' | 'left-right' | 'right-left';
+
+export interface TileNumbering {
+  tileId: string;
+  displayNumber: string;
+  slopeNumber: number;
+  rowNumber: number;
+  colNumber: number;
+  globalSequence: number;
+}
+
+export interface MaterialGroup {
+  groupKey: string;
+  groupName: string;
+  isCut: boolean;
+  cutType?: Tile['cutType'];
+  width: number;
+  height: number;
+  count: number;
+  totalArea: number;
+  tileIds: string[];
+}
+
+export interface ConstructionStep {
+  stepNumber: number;
+  tileIds: string[];
+  description: string;
+  row?: number;
+  estimatedArea: number;
+}
+
+export interface NumberingResult {
+  numberingMap: Record<string, TileNumbering>;
+  scheme: NumberingScheme;
+  totalTiles: number;
+}
+
+export interface MaterialStatsResult {
+  groups: MaterialGroup[];
+  fullTileGroups: MaterialGroup[];
+  cutTileGroups: MaterialGroup[];
+  summary: {
+    totalGroups: number;
+    fullTileCount: number;
+    cutTileCount: number;
+    totalTileCount: number;
+    totalArea: number;
+  };
+}
+
+export interface ConstructionSequenceResult {
+  steps: ConstructionStep[];
+  direction: ConstructionDirection;
+  totalSteps: number;
+}
+
+export interface ConstructionListExportData {
+  projectInfo: {
+    exportDate: string;
+    roofShape: string;
+    roofWidth: number;
+    roofHeight: number;
+    roofArea: number;
+    tileType: string;
+    tileWidth: number;
+    tileHeight: number;
+  };
+  numbering: NumberingResult;
+  materials: MaterialStatsResult;
+  sequence: ConstructionSequenceResult;
+  tileDetails: Array<Tile & { displayNumber: string; globalSequence: number }>;
+}
