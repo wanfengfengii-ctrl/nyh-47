@@ -1,0 +1,217 @@
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { Stage, Layer, Rect, Line } from 'react-konva';
+import { Card, Group as MantineGroup, Text, ActionIcon, Tooltip } from '@mantine/core';
+import { useRoofStore } from '@/store/roofStore';
+import { getRoofBoundaryPoints, isPointInRoof } from '@/utils/roofCalculator';
+import type { Tile } from '@/types';
+import { IconZoomIn, IconZoomOut, IconZoomCancel } from '@tabler/icons-react';
+import Konva from 'konva';
+
+const STAGE_PADDING = 40;
+const SCALE_STEP = 0.1;
+const MIN_SCALE = 0.1;
+const MAX_SCALE = 5;
+
+export default function RoofCanvas() {
+  const { roof, layout, selectedTileId, setSelectedTile, setManualAdjustment, tiles } = useRoofStore();
+  const stageRef = useRef<Konva.Stage>(null);
+  const [scale, setScale] = useState(1);
+  const [stageSize, setStageSize] = useState({ width: 600, height: 500 });
+  const [offset, setOffset] = useState({ x: STAGE_PADDING, y: STAGE_PADDING });
+
+  const boundaryPoints = getRoofBoundaryPoints(roof);
+  const boundaryFlatPoints = boundaryPoints.flatMap((p) => [p.x, p.y]);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const fitToScreen = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const availableWidth = rect.width - STAGE_PADDING * 2;
+    const availableHeight = rect.height - STAGE_PADDING * 2;
+
+    const scaleX = availableWidth / roof.width;
+    const scaleY = availableHeight / roof.height;
+    const newScale = Math.min(scaleX, scaleY, 1);
+
+    const scaledWidth = roof.width * newScale;
+    const scaledHeight = roof.height * newScale;
+    const offsetX = (rect.width - scaledWidth) / 2;
+    const offsetY = (rect.height - scaledHeight) / 2;
+
+    setScale(newScale);
+    setOffset({ x: offsetX, y: offsetY });
+  }, [roof.width, roof.height]);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      const updateSize = () => {
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          setStageSize({
+            width: rect.width,
+            height: rect.height,
+          });
+          fitToScreen();
+        }
+      };
+      updateSize();
+      window.addEventListener('resize', updateSize);
+      return () => window.removeEventListener('resize', updateSize);
+    }
+  }, [fitToScreen]);
+
+  const handleZoom = useCallback((delta: number) => {
+    setScale((prev) => {
+      const newScale = prev + delta;
+      return Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+    });
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    fitToScreen();
+  }, [fitToScreen]);
+
+  const handleTileClick = useCallback(
+    (tile: Tile) => {
+      setSelectedTile(tile.id);
+    },
+    [setSelectedTile]
+  );
+
+  const handleDragEnd = useCallback(
+    (e: Konva.KonvaEventObject<DragEvent>, tile: Tile) => {
+      const node = e.target;
+      let newX = node.x();
+      let newY = node.y();
+
+      const tileCenterX = newX + tile.width / 2;
+      const tileCenterY = newY + tile.height / 2;
+
+      if (!isPointInRoof(roof, tileCenterX, tileCenterY)) {
+        node.x(tile.x);
+        node.y(tile.y);
+        return;
+      }
+
+      if (newX < 0) newX = 0;
+      if (newY < 0) newY = 0;
+      if (newX + tile.width > roof.width) newX = roof.width - tile.width;
+      if (newY + tile.height > roof.height) newY = roof.height - tile.height;
+
+      node.x(newX);
+      node.y(newY);
+
+      setManualAdjustment(tile.id, newX, newY);
+    },
+    [roof, setManualAdjustment]
+  );
+
+  const handleStageClick = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      if (e.target === e.target.getStage()) {
+        setSelectedTile(null);
+      }
+    },
+    [setSelectedTile]
+  );
+
+  const getTileFill = (tile: Tile) => {
+    if (tile.id === selectedTileId) return '#3b82f6';
+    if (tile.manuallyAdjusted) return '#8b5cf6';
+    if (tile.isCut) return '#f59e0b';
+    return tiles.tileType === 'round' ? '#8b4513' : '#a0522d';
+  };
+
+  const getTileStroke = (tile: Tile) => {
+    if (tile.id === selectedTileId) return '#1d4ed8';
+    if (tile.manuallyAdjusted) return '#7c3aed';
+    return '#5c2e0e';
+  };
+
+  return (
+    <Card withBorder shadow="sm" radius="md" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Card.Section withBorder p="xs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <MantineGroup gap="xs">
+          <Tooltip label="放大">
+            <ActionIcon variant="light" onClick={() => handleZoom(SCALE_STEP)}>
+              <IconZoomIn size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="缩小">
+            <ActionIcon variant="light" onClick={() => handleZoom(-SCALE_STEP)}>
+              <IconZoomOut size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="适应画布">
+            <ActionIcon variant="light" onClick={handleResetZoom}>
+              <IconZoomCancel size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Text size="sm" c="dimmed">
+            缩放: {(scale * 100).toFixed(0)}%
+          </Text>
+        </MantineGroup>
+        <Text size="sm" c="dimmed">
+          点击瓦片可选中，拖拽可调整位置
+        </Text>
+      </Card.Section>
+
+      <Card.Section ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 400 }}>
+        <Stage
+          ref={stageRef}
+          width={stageSize.width}
+          height={stageSize.height}
+          scaleX={scale}
+          scaleY={scale}
+          x={offset.x}
+          y={offset.y}
+          onClick={handleStageClick}
+          style={{ background: '#f8fafc' }}
+        >
+          <Layer>
+            <Line
+              points={boundaryFlatPoints as number[]}
+              fill="#e2e8f0"
+              stroke="#64748b"
+              strokeWidth={2}
+              closed
+            />
+
+            {layout.tiles.map((tile) => (
+              <Rect
+                key={tile.id}
+                x={tile.x}
+                y={tile.y}
+                width={tile.width}
+                height={tile.height}
+                fill={getTileFill(tile)}
+                stroke={getTileStroke(tile)}
+                strokeWidth={1}
+                draggable
+                onClick={() => handleTileClick(tile)}
+                onDragEnd={(e) => handleDragEnd(e, tile)}
+                shadowColor="rgba(0,0,0,0.1)"
+                shadowBlur={2}
+                shadowOffsetX={1}
+                shadowOffsetY={1}
+              />
+            ))}
+
+            {selectedTileId && (
+              <Rect
+                x={layout.tiles.find((t) => t.id === selectedTileId)?.x ?? 0}
+                y={layout.tiles.find((t) => t.id === selectedTileId)?.y ?? 0}
+                width={layout.tiles.find((t) => t.id === selectedTileId)?.width ?? 0}
+                height={layout.tiles.find((t) => t.id === selectedTileId)?.height ?? 0}
+                stroke="#3b82f6"
+                strokeWidth={3}
+                dash={[5, 5]}
+              />
+            )}
+          </Layer>
+        </Stage>
+      </Card.Section>
+    </Card>
+  );
+}
