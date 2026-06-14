@@ -3,7 +3,7 @@ import { useRoofStore } from '@/store/roofStore';
 import { IconSquare, IconRefresh } from '@tabler/icons-react';
 
 export default function TileDetailPanel() {
-  const { layout, selectedTileId, setManualAdjustment, manualAdjustments } = useRoofStore();
+  const { layout, selectedTileId, setManualAdjustment, manualAdjustments, clearManualAdjustment } = useRoofStore();
 
   const selectedTile = layout.tiles.find((t) => t.id === selectedTileId);
 
@@ -40,9 +40,7 @@ export default function TileDetailPanel() {
   };
 
   const handleReset = () => {
-    const newAdjustments = { ...manualAdjustments };
-    delete newAdjustments[selectedTile.id];
-    setManualAdjustment(selectedTile.id, selectedTile.x, selectedTile.y);
+    clearManualAdjustment(selectedTile.id);
   };
 
   return (

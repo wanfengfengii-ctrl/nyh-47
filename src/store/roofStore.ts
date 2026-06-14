@@ -15,6 +15,7 @@ interface RoofStore {
   setTiles: (tiles: Partial<TileParams>) => void;
   setSelectedTile: (id: string | null) => void;
   setManualAdjustment: (tileId: string, x: number, y: number) => void;
+  clearManualAdjustment: (tileId: string) => void;
   clearManualAdjustments: () => void;
   setWasteThreshold: (threshold: number) => void;
   recalculateLayout: () => void;
@@ -94,6 +95,19 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
     });
   },
 
+  clearManualAdjustment: (tileId) => {
+    set((state) => {
+      const newAdjustments = { ...state.manualAdjustments };
+      delete newAdjustments[tileId];
+      const newLayout = calculateLayout(state.roof, state.tiles, newAdjustments);
+      return {
+        manualAdjustments: newAdjustments,
+        layout: newLayout,
+        showWasteWarning: newLayout.wasteRate > state.wasteThreshold,
+      };
+    });
+  },
+
   clearManualAdjustments: () => {
     set((state) => {
       const newLayout = calculateLayout(state.roof, state.tiles, {});
@@ -134,13 +148,14 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
   },
 
   importProject: (data) => {
+    const newLayout = calculateLayout(data.roof, data.tiles, data.manualAdjustments);
     set({
       roof: data.roof,
       tiles: data.tiles,
-      layout: data.layout,
+      layout: newLayout,
       manualAdjustments: data.manualAdjustments,
       wasteThreshold: data.wasteThreshold,
-      showWasteWarning: data.layout.wasteRate > data.wasteThreshold,
+      showWasteWarning: newLayout.wasteRate > data.wasteThreshold,
     });
   },
 }));

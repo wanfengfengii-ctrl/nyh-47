@@ -79,50 +79,43 @@ export function calculateLayout(
 ): LayoutResult {
   const tileWidth = tiles.width;
   const tileLength = tiles.length;
-  const stepX = tileWidth - tiles.overlapX;
-  const stepY = tileLength - tiles.overlapY;
+  const targetStepX = tileWidth - tiles.overlapX;
+  const targetStepY = tileLength - tiles.overlapY;
+  const minStepX = tileWidth - tiles.minOverlapX;
+  const minStepY = tileLength - tiles.minOverlapY;
 
   const tileList: Tile[] = [];
   const roofArea = calculateRoofArea(roof);
 
-  let row = 0;
-  let currentY = 0;
+  const targetRows = Math.ceil((roof.height - tileLength) / targetStepY) + 1;
+  const minRows = Math.ceil((roof.height - tileLength) / minStepY) + 1;
+  const totalRows = Math.max(targetRows, minRows);
 
-  while (currentY < roof.height) {
-    const leftOffset = getRoofLeftOffsetAtY(roof, currentY);
-    const rowWidth = getRoofWidthAtY(roof, currentY);
+  const actualStepY = totalRows > 1 ? (roof.height - tileLength) / (totalRows - 1) : 0;
+
+  for (let row = 0; row < totalRows; row++) {
+    const currentY = totalRows > 1 ? row * actualStepY : 0;
+
+    const midY = currentY + tileLength / 2;
+    const leftOffset = getRoofLeftOffsetAtY(roof, Math.min(midY, roof.height));
+    const rowWidth = getRoofWidthAtY(roof, Math.min(midY, roof.height));
     const rowRightEdge = leftOffset + rowWidth;
 
-    const nextY = currentY + stepY;
-    const nextLeftOffset = getRoofLeftOffsetAtY(roof, Math.min(nextY, roof.height));
-    const nextRowWidth = getRoofWidthAtY(roof, Math.min(nextY, roof.height));
-    const nextRowRightEdge = nextLeftOffset + nextRowWidth;
+    const targetTilesInRow = Math.ceil((rowWidth - tileWidth) / targetStepX) + 1;
+    const minTilesInRow = Math.ceil((rowWidth - tileWidth) / minStepX) + 1;
+    const tilesInRow = Math.max(targetTilesInRow, minTilesInRow);
 
-    const effectiveLeft = Math.min(leftOffset, nextLeftOffset);
-    const effectiveRight = Math.max(rowRightEdge, nextRowRightEdge);
-
-    const tilesInRow = Math.ceil((effectiveRight - effectiveLeft) / stepX) + 1;
+    const actualStepX = tilesInRow > 1 ? (rowWidth - tileWidth) / (tilesInRow - 1) : 0;
 
     let col = 0;
     for (let i = 0; i < tilesInRow; i++) {
-      const tileX = effectiveLeft + i * stepX;
+      const tileX = leftOffset + (tilesInRow > 1 ? i * actualStepX : 0);
       const tileY = currentY;
 
       const tileLeftEdge = tileX;
       const tileRightEdge = tileX + tileWidth;
       const tileTopEdge = tileY;
       const tileBottomEdge = tileY + tileLength;
-
-      const midY = tileY + tileLength / 2;
-      const midLeftOffset = getRoofLeftOffsetAtY(roof, Math.min(midY, roof.height));
-      const midRowWidth = getRoofWidthAtY(roof, Math.min(midY, roof.height));
-      const midRightEdge = midLeftOffset + midRowWidth;
-
-      const tileCenterX = tileX + tileWidth / 2;
-      const isInsideRoof = tileCenterX >= midLeftOffset && tileCenterX <= midRightEdge;
-
-      if (!isInsideRoof && tileRightEdge < midLeftOffset) continue;
-      if (!isInsideRoof && tileLeftEdge > midRightEdge) continue;
 
       let finalX = tileX;
       let finalY = tileY;
@@ -133,13 +126,13 @@ export function calculateLayout(
       let originalWidth = tileWidth;
       let originalHeight = tileLength;
 
-      const leftOverlap = tileLeftEdge - midLeftOffset;
-      const rightOverlap = midRightEdge - tileRightEdge;
+      const leftOverlap = tileLeftEdge - leftOffset;
+      const rightOverlap = rowRightEdge - tileRightEdge;
       const topOverlap = tileTopEdge;
       const bottomOverlap = roof.height - tileBottomEdge;
 
       if (leftOverlap < 0) {
-        finalX = midLeftOffset;
+        finalX = leftOffset;
         finalWidth = tileWidth + leftOverlap;
         isCut = true;
         cutType = 'left';
@@ -190,9 +183,6 @@ export function calculateLayout(
 
       col++;
     }
-
-    currentY = nextY;
-    row++;
   }
 
   const fullTileCount = tileList.filter((t) => t.isFull).length;
