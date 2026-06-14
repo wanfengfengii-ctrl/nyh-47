@@ -1,5 +1,5 @@
 import { AppShell, Group, Title, Text, Stack, ScrollArea, Tabs } from '@mantine/core';
-import { IconBuildingChurch, IconListNumbers, IconListCheck, IconPackages } from '@tabler/icons-react';
+import { IconBuildingChurch, IconListNumbers, IconListCheck, IconPackages, IconPrinter } from '@tabler/icons-react';
 import RoofControlPanel from '@/components/RoofControlPanel';
 import TileControlPanel from '@/components/TileControlPanel';
 import StatsPanel from '@/components/StatsPanel';
@@ -10,6 +10,7 @@ import ExportImportToolbar from '@/components/ExportImportToolbar';
 import TileNumberingPanel from '@/components/TileNumberingPanel';
 import ConstructionSequencePanel from '@/components/ConstructionSequencePanel';
 import MaterialStatsPanel from '@/components/MaterialStatsPanel';
+import ConstructionListPanel from '@/components/ConstructionListPanel';
 
 export default function Home() {
   return (
@@ -66,6 +67,9 @@ export default function Home() {
                     <Tabs.Tab value="materials" leftSection={<IconPackages size={14} />}>
                       材料
                     </Tabs.Tab>
+                    <Tabs.Tab value="list" leftSection={<IconPrinter size={14} />}>
+                      清单
+                    </Tabs.Tab>
                   </Tabs.List>
 
                   <Tabs.Panel value="numbering" pt="md">
@@ -78,6 +82,10 @@ export default function Home() {
 
                   <Tabs.Panel value="materials" pt="md">
                     <MaterialStatsPanel />
+                  </Tabs.Panel>
+
+                  <Tabs.Panel value="list" pt="md">
+                    <ConstructionListPanel />
                   </Tabs.Panel>
                 </Tabs>
                 <LegendPanel />

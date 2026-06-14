@@ -151,3 +151,15 @@ export interface ConstructionListExportData {
   sequence: ConstructionSequenceResult;
   tileDetails: Array<Tile & { displayNumber: string; globalSequence: number }>;
 }
+
+export type SelectionMode = 'single' | 'multi' | 'box';
+
+export interface ConstructionListFilter {
+  includeFullTiles: boolean;
+  includeCutTiles: boolean;
+  selectedGroups: string[];
+  selectedSteps: number[];
+  searchKeyword: string;
+}
+
+export type HighlightSource = 'none' | 'step' | 'material' | 'selection' | 'numbering';

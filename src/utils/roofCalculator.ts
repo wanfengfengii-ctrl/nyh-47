@@ -1,4 +1,4 @@
-import type { RoofParams, TileParams, Tile, LayoutResult, Point, OverlapViolation, ValidationResult, NumberingScheme, NumberingResult, TileNumbering, MaterialStatsResult, MaterialGroup, ConstructionDirection, ConstructionSequenceResult, ConstructionStep, ConstructionListExportData } from '@/types';
+import type { RoofParams, TileParams, Tile, LayoutResult, Point, OverlapViolation, ValidationResult, NumberingScheme, NumberingResult, TileNumbering, MaterialStatsResult, MaterialGroup, ConstructionDirection, ConstructionSequenceResult, ConstructionStep, ConstructionListExportData, ConstructionListFilter } from '@/types';
 
 export function calculateRoofArea(roof: RoofParams): number {
   switch (roof.shape) {
@@ -1016,4 +1016,405 @@ export function generatePrintableConstructionListHTML(data: ConstructionListExpo
   `;
 
   return rows;
+}
+
+export function generateFilteredPrintableConstructionListHTML(
+  data: ConstructionListExportData,
+  filter: ConstructionListFilter
+): string {
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  let filteredTileDetails = [...data.tileDetails];
+  let filteredGroups = [...data.materials.groups];
+  let filteredSteps = [...data.sequence.steps];
+
+  if (!filter.includeFullTiles) {
+    filteredTileDetails = filteredTileDetails.filter(t => t.isCut);
+    filteredGroups = filteredGroups.filter(g => g.isCut);
+  }
+  if (!filter.includeCutTiles) {
+    filteredTileDetails = filteredTileDetails.filter(t => !t.isCut);
+    filteredGroups = filteredGroups.filter(g => !g.isCut);
+  }
+
+  if (filter.selectedGroups.length > 0) {
+    const selectedTileIds = new Set<string>();
+    filteredGroups = filteredGroups.filter(g => filter.selectedGroups.includes(g.groupKey));
+    filteredGroups.forEach(g => g.tileIds.forEach(id => selectedTileIds.add(id)));
+    filteredTileDetails = filteredTileDetails.filter(t => selectedTileIds.has(t.id));
+  }
+
+  if (filter.selectedSteps.length > 0) {
+    const stepTileIds = new Set<string>();
+    filteredSteps = filteredSteps.filter(s => filter.selectedSteps.includes(s.stepNumber));
+    filteredSteps.forEach(s => s.tileIds.forEach(id => stepTileIds.add(id)));
+    filteredTileDetails = filteredTileDetails.filter(t => stepTileIds.has(t.id));
+    if (filter.selectedGroups.length === 0) {
+      const groupTileSet = new Set(filteredTileDetails.map(t => t.id));
+      filteredGroups = filteredGroups.map(g => ({
+        ...g,
+        tileIds: g.tileIds.filter(id => groupTileSet.has(id)),
+        count: g.tileIds.filter(id => groupTileSet.has(id)).length,
+        totalArea: g.tileIds.filter(id => groupTileSet.has(id)).reduce((sum, id) => {
+          const tile = data.tileDetails.find(t => t.id === id);
+          return sum + (tile ? tile.width * tile.height : 0);
+        }, 0),
+      })).filter(g => g.count > 0);
+    }
+  }
+
+  if (filter.searchKeyword.trim()) {
+    const kw = filter.searchKeyword.toLowerCase();
+    filteredTileDetails = filteredTileDetails.filter(t =>
+      t.displayNumber.toLowerCase().includes(kw) ||
+      t.id.toLowerCase().includes(kw) ||
+      String(t.row + 1).includes(kw) ||
+      String(t.col + 1).includes(kw)
+    );
+    const detailIdSet = new Set(filteredTileDetails.map(t => t.id));
+    filteredGroups = filteredGroups.map(g => ({
+      ...g,
+      tileIds: g.tileIds.filter(id => detailIdSet.has(id)),
+      count: g.tileIds.filter(id => detailIdSet.has(id)).length,
+      totalArea: g.tileIds.filter(id => detailIdSet.has(id)).reduce((sum, id) => {
+        const tile = data.tileDetails.find(t => t.id === id);
+        return sum + (tile ? tile.width * tile.height : 0);
+      }, 0),
+    })).filter(g => g.count > 0);
+    filteredSteps = filteredSteps.map(s => ({
+      ...s,
+      tileIds: s.tileIds.filter(id => detailIdSet.has(id)),
+    })).filter(s => s.tileIds.length > 0);
+  }
+
+  const totalFilteredCount = filteredTileDetails.length;
+  const totalFilteredArea = filteredTileDetails.reduce((sum, t) => sum + t.width * t.height, 0);
+
+  const hasFilter = !filter.includeFullTiles || !filter.includeCutTiles ||
+    filter.selectedGroups.length > 0 || filter.selectedSteps.length > 0 ||
+    filter.searchKeyword.trim() !== '';
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>古建筑屋面施工清单${hasFilter ? '（筛选）' : ''}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: "SimSun", "宋体", serif;
+          padding: 40px;
+          background: #fff;
+          color: #333;
+          line-height: 1.6;
+        }
+        .header {
+          text-align: center;
+          border-bottom: 2px solid #333;
+          padding-bottom: 20px;
+          margin-bottom: 20px;
+        }
+        .header h1 {
+          font-size: 28px;
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+        .header .subtitle {
+          font-size: 14px;
+          color: #666;
+        }
+        .filter-info {
+          background: #f0f7ff;
+          border: 1px solid #b0d4ff;
+          padding: 12px 16px;
+          margin-bottom: 20px;
+          font-size: 13px;
+        }
+        .filter-info .filter-title {
+          font-weight: bold;
+          color: #1e40af;
+          margin-bottom: 6px;
+        }
+        .filter-info .filter-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .filter-tag {
+          background: #dbeafe;
+          color: #1e40af;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+        }
+        .section {
+          margin-bottom: 30px;
+        }
+        .section-title {
+          font-size: 18px;
+          font-weight: bold;
+          border-left: 4px solid #8b4513;
+          padding-left: 10px;
+          margin-bottom: 15px;
+          color: #8b4513;
+        }
+        .info-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
+          font-size: 14px;
+        }
+        .info-item {
+          padding: 8px 12px;
+          background: #f9f6f0;
+          border: 1px solid #e0d8c8;
+        }
+        .info-label {
+          color: #666;
+          margin-right: 8px;
+        }
+        .info-value {
+          font-weight: bold;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+        th, td {
+          border: 1px solid #999;
+          padding: 8px 10px;
+          text-align: center;
+        }
+        th {
+          background: #8b4513;
+          color: #fff;
+          font-weight: bold;
+        }
+        tr:nth-child(even) td {
+          background: #f9f6f0;
+        }
+        .cut-tile {
+          background: #fff8e6 !important;
+        }
+        .summary-row td {
+          background: #ede4d4 !important;
+          font-weight: bold;
+        }
+        .footer {
+          margin-top: 40px;
+          padding-top: 20px;
+          border-top: 1px solid #999;
+          display: flex;
+          justify-content: space-between;
+          font-size: 13px;
+          color: #666;
+        }
+        .sign-area {
+          display: inline-block;
+          min-width: 150px;
+        }
+        @media print {
+          body { padding: 20px; }
+          .section { page-break-inside: avoid; }
+          .filter-info { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>古建筑屋面瓦作施工清单</h1>
+        <div class="subtitle">
+          导出日期：${formatDate(data.projectInfo.exportDate)}
+          ${hasFilter ? ' | 筛选结果' : ''}
+        </div>
+      </div>
+
+      ${hasFilter ? `
+      <div class="filter-info">
+        <div class="filter-title">筛选条件</div>
+        <div class="filter-tags">
+          ${!filter.includeFullTiles ? '<span class="filter-tag">排除完整瓦</span>' : ''}
+          ${!filter.includeCutTiles ? '<span class="filter-tag">排除裁切瓦</span>' : ''}
+          ${filter.selectedGroups.length > 0 ? `<span class="filter-tag">材料分组：${filter.selectedGroups.length}组</span>` : ''}
+          ${filter.selectedSteps.length > 0 ? `<span class="filter-tag">施工步骤：${filter.selectedSteps.length}步</span>` : ''}
+          ${filter.searchKeyword.trim() ? `<span class="filter-tag">关键词：${filter.searchKeyword}</span>` : ''}
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="section">
+        <div class="section-title">一、工程概况</div>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">屋面形式：</span>
+            <span class="info-value">${data.projectInfo.roofShape}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">屋面宽度：</span>
+            <span class="info-value">${data.projectInfo.roofWidth} mm</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">屋面高度：</span>
+            <span class="info-value">${data.projectInfo.roofHeight} mm</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">屋面面积：</span>
+            <span class="info-value">${(data.projectInfo.roofArea / 1000000).toFixed(4)} m²</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">瓦件类型：</span>
+            <span class="info-value">${data.projectInfo.tileType}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">瓦件规格：</span>
+            <span class="info-value">${data.projectInfo.tileWidth}×${data.projectInfo.tileHeight} mm</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">二、筛选结果统计</div>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">筛选瓦数：</span>
+            <span class="info-value">${totalFilteredCount} 块</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">筛选面积：</span>
+            <span class="info-value">${(totalFilteredArea / 1000000).toFixed(4)} m²</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">占总数比：</span>
+            <span class="info-value">${data.materials.summary.totalTileCount > 0 ? ((totalFilteredCount / data.materials.summary.totalTileCount) * 100).toFixed(1) : 0}%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">三、材料分组统计</div>
+        <table>
+          <thead>
+            <tr>
+              <th>序号</th>
+              <th>材料名称</th>
+              <th>规格 (mm)</th>
+              <th>类型</th>
+              <th>数量 (块)</th>
+              <th>单块面积 (mm²)</th>
+              <th>总面积 (mm²)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredGroups.map((g, i) => `
+              <tr class="${g.isCut ? 'cut-tile' : ''}">
+                <td>${i + 1}</td>
+                <td>${g.groupName}</td>
+                <td>${g.width}×${g.height}</td>
+                <td>${g.isCut ? '裁切瓦' : '完整瓦'}</td>
+                <td>${g.count}</td>
+                <td>${g.count > 0 ? (g.totalArea / g.count).toFixed(0) : 0}</td>
+                <td>${g.totalArea.toFixed(0)}</td>
+              </tr>
+            `).join('')}
+            <tr class="summary-row">
+              <td colspan="4">合计</td>
+              <td>${filteredGroups.reduce((sum, g) => sum + g.count, 0)}</td>
+              <td>-</td>
+              <td>${filteredGroups.reduce((sum, g) => sum + g.totalArea, 0).toFixed(0)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <div class="section-title">四、施工顺序（共 ${filteredSteps.length} 步）</div>
+        <table>
+          <thead>
+            <tr>
+              <th>步骤</th>
+              <th>施工内容</th>
+              <th>瓦片数量 (块)</th>
+              <th>估计面积 (mm²)</th>
+              <th>瓦片编号</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredSteps.map((step) => `
+              <tr>
+                <td>${step.stepNumber}</td>
+                <td>${step.description}</td>
+                <td>${step.tileIds.length}</td>
+                <td>${step.tileIds.reduce((sum, id) => {
+                  const tile = data.tileDetails.find(t => t.id === id);
+                  return sum + (tile ? tile.width * tile.height : 0);
+                }, 0).toFixed(0)}</td>
+                <td style="text-align:left;font-size:11px;">${step.tileIds.map(id => data.numbering.numberingMap[id]?.displayNumber || id).join('、')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <div class="section-title">五、瓦片明细清单（共 ${filteredTileDetails.length} 块）</div>
+        <table>
+          <thead>
+            <tr>
+              <th>序号</th>
+              <th>瓦片编号</th>
+              <th>行列位置</th>
+              <th>类型</th>
+              <th>规格 (mm)</th>
+              <th>位置 X (mm)</th>
+              <th>位置 Y (mm)</th>
+              <th>裁切方式</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredTileDetails.map((tile, i) => {
+              const cutTypeName = tile.cutType === 'left' ? '左裁切'
+                : tile.cutType === 'right' ? '右裁切'
+                : tile.cutType === 'top' ? '上裁切'
+                : tile.cutType === 'bottom' ? '下裁切'
+                : tile.cutType === 'both' ? '双侧裁切'
+                : '-';
+              return `
+                <tr class="${tile.isCut ? 'cut-tile' : ''}">
+                  <td>${i + 1}</td>
+                  <td><strong>${tile.displayNumber}</strong></td>
+                  <td>第${tile.row + 1}行 第${tile.col + 1}列</td>
+                  <td>${tile.isCut ? '裁切瓦' : '完整瓦'}</td>
+                  <td>${tile.width.toFixed(1)}×${tile.height.toFixed(1)}</td>
+                  <td>${tile.x.toFixed(1)}</td>
+                  <td>${tile.y.toFixed(1)}</td>
+                  <td>${cutTypeName}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="footer">
+        <div class="sign-area">
+          制表人：____________
+        </div>
+        <div class="sign-area">
+          审核人：____________
+        </div>
+        <div class="sign-area">
+          日期：${formatDate(data.projectInfo.exportDate)}
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return html;
 }
