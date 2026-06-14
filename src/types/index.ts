@@ -56,3 +56,23 @@ export interface Point {
   x: number;
   y: number;
 }
+
+export interface OverlapViolation {
+  tileId: string;
+  type: 'horizontal' | 'vertical';
+  direction: 'left' | 'right' | 'top' | 'bottom';
+  adjacentTileId: string;
+  actualOverlap: number;
+  requiredOverlap: number;
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  violations: OverlapViolation[];
+  invalidTileIds: string[];
+}
+
+export interface TileWithOriginal extends Tile {
+  originalX: number;
+  originalY: number;
+}

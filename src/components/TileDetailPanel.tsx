@@ -1,9 +1,9 @@
-import { Card, Group, Stack, Text, NumberInput, Badge, Button } from '@mantine/core';
+import { Card, Group, Stack, Text, NumberInput, Badge, Button, Alert } from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { IconSquare, IconRefresh } from '@tabler/icons-react';
+import { IconSquare, IconRefresh, IconAlertTriangle, IconHome } from '@tabler/icons-react';
 
 export default function TileDetailPanel() {
-  const { layout, selectedTileId, setManualAdjustment, manualAdjustments, clearManualAdjustment } = useRoofStore();
+  const { layout, selectedTileId, setManualAdjustment, manualAdjustments, clearManualAdjustment, resetTileToOriginal, originalPositions, validationResult, tiles } = useRoofStore();
 
   const selectedTile = layout.tiles.find((t) => t.id === selectedTileId);
 
@@ -26,8 +26,11 @@ export default function TileDetailPanel() {
   }
 
   const adjustment = manualAdjustments[selectedTile.id];
+  const originalPos = originalPositions[selectedTile.id];
   const displayX = adjustment?.x ?? selectedTile.x;
   const displayY = adjustment?.y ?? selectedTile.y;
+  const hasViolation = validationResult.invalidTileIds.includes(selectedTile.id);
+  const tileViolations = validationResult.violations.filter(v => v.tileId === selectedTile.id);
 
   const handleXChange = (value: number | string) => {
     const num = Number(value) || 0;
@@ -41,6 +44,10 @@ export default function TileDetailPanel() {
 
   const handleReset = () => {
     clearManualAdjustment(selectedTile.id);
+  };
+
+  const handleResetToOriginal = () => {
+    resetTileToOriginal(selectedTile.id);
   };
 
   return (
@@ -59,6 +66,28 @@ export default function TileDetailPanel() {
 
       <Card.Section p="md">
         <Stack gap="md">
+          {hasViolation && (
+            <Alert
+              icon={<IconAlertTriangle size={16} />}
+              title="搭接约束违规"
+              color="red"
+              variant="light"
+            >
+              <Stack gap="xs">
+                {tileViolations.slice(0, 2).map((v, idx) => (
+                  <Text size="xs" key={idx}>
+                    {v.type === 'horizontal' ? '横向' : '纵向'}搭接不足（{v.direction === 'left' ? '左侧' : v.direction === 'right' ? '右侧' : v.direction === 'top' ? '上方' : '下方'}）：实际 {v.actualOverlap.toFixed(1)}mm，最小要求 {v.requiredOverlap}mm
+                  </Text>
+                ))}
+                {tileViolations.length > 2 && (
+                  <Text size="xs" c="dimmed">
+                    还有 {tileViolations.length - 2} 项违规...
+                  </Text>
+                )}
+              </Stack>
+            </Alert>
+          )}
+
           <Group grow>
             <div>
               <Text size="sm" c="dimmed">瓦片编号</Text>
@@ -98,6 +127,23 @@ export default function TileDetailPanel() {
             </Group>
           )}
 
+          {originalPos && (
+            <Group grow>
+              <div>
+                <Text size="sm" c="dimmed">原始 X 坐标</Text>
+                <Text fw={600} c="blue">
+                  {originalPos.x.toFixed(1)} mm
+                </Text>
+              </div>
+              <div>
+                <Text size="sm" c="dimmed">原始 Y 坐标</Text>
+                <Text fw={600} c="blue">
+                  {originalPos.y.toFixed(1)} mm
+                </Text>
+              </div>
+            </Group>
+          )}
+
           <Text size="sm" fw={500} mt="xs">位置调整</Text>
 
           <Group grow>
@@ -107,6 +153,7 @@ export default function TileDetailPanel() {
               onChange={handleXChange}
               min={0}
               size="sm"
+              error={hasViolation}
             />
             <NumberInput
               label="Y 坐标 (mm)"
@@ -114,20 +161,36 @@ export default function TileDetailPanel() {
               onChange={handleYChange}
               min={0}
               size="sm"
+              error={hasViolation}
             />
           </Group>
 
-          {selectedTile.manuallyAdjusted && (
+          <Group grow>
+            {selectedTile.manuallyAdjusted && (
+              <Button
+                leftSection={<IconRefresh size={16} />}
+                variant="light"
+                color="gray"
+                size="sm"
+                onClick={handleReset}
+              >
+                清除调整标记
+              </Button>
+            )}
             <Button
-              leftSection={<IconRefresh size={16} />}
-              variant="light"
-              color="gray"
+              leftSection={<IconHome size={16} />}
+              variant="filled"
+              color="blue"
               size="sm"
-              onClick={handleReset}
+              onClick={handleResetToOriginal}
             >
-              重置此瓦片位置
+              重置到原始位置
             </Button>
-          )}
+          </Group>
+
+          <Text size="xs" c="dimmed">
+            最小搭接要求：横向 {tiles.minOverlapX}mm，纵向 {tiles.minOverlapY}mm
+          </Text>
         </Stack>
       </Card.Section>
     </Card>

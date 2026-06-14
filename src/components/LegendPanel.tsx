@@ -77,6 +77,19 @@ export default function LegendPanel() {
             />
             <Text size="sm">屋面区域</Text>
           </Group>
+          <Group gap="sm">
+            <Box
+              w={24}
+              h={16}
+              style={{
+                backgroundColor: '#ef4444',
+                border: '3px solid #b91c1c',
+                borderRadius: 2,
+                boxShadow: '0 0 8px rgba(239,68,68,0.5)',
+              }}
+            />
+            <Text size="sm">搭接违规</Text>
+          </Group>
         </Stack>
       </Card.Section>
     </Card>

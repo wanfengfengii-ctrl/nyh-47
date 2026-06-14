@@ -1,9 +1,9 @@
-import { Card, Group, Stack, Text, Progress, Badge, Alert, NumberInput } from '@mantine/core';
+import { Card, Group, Stack, Text, Progress, Badge, Alert, NumberInput, Button } from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { IconChartBar, IconAlertTriangle, IconTrash } from '@tabler/icons-react';
+import { IconChartBar, IconAlertTriangle, IconTrash, IconCircleCheck, IconAlertCircle } from '@tabler/icons-react';
 
 export default function StatsPanel() {
-  const { layout, wasteThreshold, showWasteWarning, setWasteThreshold, clearManualAdjustments, manualAdjustments } = useRoofStore();
+  const { layout, wasteThreshold, showWasteWarning, setWasteThreshold, clearManualAdjustments, manualAdjustments, validationResult, validateLayout, lastValidationMessage } = useRoofStore();
 
   const wastePercent = (layout.wasteRate * 100).toFixed(2);
   const thresholdPercent = (wasteThreshold * 100).toFixed(0);
@@ -106,6 +106,56 @@ export default function StatsPanel() {
                 重置调整
               </Badge>
             </Group>
+          )}
+
+          <Group grow>
+            <div>
+              <Text size="sm" c="dimmed">搭接约束状态</Text>
+              <Group gap="xs" mt="xs">
+                {validationResult.isValid ? (
+                  <>
+                    <IconCircleCheck size={18} color="green" />
+                    <Text fw={600} c="green">正常</Text>
+                  </>
+                ) : (
+                  <>
+                    <IconAlertCircle size={18} color="red" />
+                    <Text fw={600} c="red">
+                      {validationResult.invalidTileIds.length} 块违规
+                    </Text>
+                  </>
+                )}
+              </Group>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <Button
+                variant="light"
+                size="sm"
+                onClick={validateLayout}
+                fullWidth
+              >
+                重新校验
+              </Button>
+            </div>
+          </Group>
+
+          {!validationResult.isValid && (
+            <Alert
+              icon={<IconAlertTriangle size={16} />}
+              title="搭接约束违规"
+              color="red"
+              variant="light"
+            >
+              <Stack gap="xs">
+                <Text size="sm">
+                  共有 {validationResult.invalidTileIds.length} 块瓦片存在搭接约束违规。
+                </Text>
+                <Text size="xs" c="dimmed">
+                  违规瓦片：{validationResult.invalidTileIds.slice(0, 5).join('、')}
+                  {validationResult.invalidTileIds.length > 5 && ` 等 ${validationResult.invalidTileIds.length} 块`}
+                </Text>
+              </Stack>
+            </Alert>
           )}
         </Stack>
       </Card.Section>
