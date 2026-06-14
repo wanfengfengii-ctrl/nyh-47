@@ -21,6 +21,7 @@ interface RoofStore {
   materialStats: MaterialStatsResult;
   showTileNumbers: boolean;
   highlightedStepNumber: number | null;
+  highlightedMaterialGroupTileIds: string[];
 
   setRoof: (roof: Partial<RoofParams>) => void;
   setTiles: (tiles: Partial<TileParams>) => void;
@@ -41,6 +42,8 @@ interface RoofStore {
   toggleShowTileNumbers: () => void;
   setShowTileNumbers: (show: boolean) => void;
   setHighlightedStepNumber: (step: number | null) => void;
+  setHighlightedMaterialGroupTileIds: (tileIds: string[]) => void;
+  clearHighlightedMaterialGroup: () => void;
   regenerateDerivedData: () => void;
   exportConstructionListJSON: () => ConstructionListExportData;
   exportConstructionListHTML: () => void;
@@ -90,6 +93,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
   materialStats: initialMaterialStats,
   showTileNumbers: true,
   highlightedStepNumber: null,
+  highlightedMaterialGroupTileIds: [],
 
   setRoof: (roof) => {
     set((state) => {
@@ -110,6 +114,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
         constructionSequence: sequence,
         materialStats,
         highlightedStepNumber: null,
+        highlightedMaterialGroupTileIds: [],
       };
     });
   },
@@ -133,12 +138,13 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
         constructionSequence: sequence,
         materialStats,
         highlightedStepNumber: null,
+        highlightedMaterialGroupTileIds: [],
       };
     });
   },
 
   setSelectedTile: (id) => {
-    set({ selectedTileId: id });
+    set({ selectedTileId: id, highlightedMaterialGroupTileIds: [] });
   },
 
   setManualAdjustment: (tileId, x, y) => {
@@ -207,6 +213,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
       constructionSequence: sequence,
       materialStats,
       highlightedStepNumber: null,
+      highlightedMaterialGroupTileIds: [],
     });
 
     return { success: true, message: '' };
@@ -234,6 +241,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
         constructionSequence: sequence,
         materialStats,
         highlightedStepNumber: null,
+        highlightedMaterialGroupTileIds: [],
       };
     });
   },
@@ -258,6 +266,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
         constructionSequence: sequence,
         materialStats,
         highlightedStepNumber: null,
+        highlightedMaterialGroupTileIds: [],
       };
     });
   },
@@ -293,6 +302,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
       constructionSequence: sequence,
       materialStats,
       highlightedStepNumber: null,
+      highlightedMaterialGroupTileIds: [],
     });
   },
 
@@ -314,6 +324,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
         constructionSequence: sequence,
         materialStats,
         highlightedStepNumber: null,
+        highlightedMaterialGroupTileIds: [],
       };
     });
   },
@@ -342,6 +353,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
         constructionSequence: sequence,
         materialStats,
         highlightedStepNumber: null,
+        highlightedMaterialGroupTileIds: [],
       };
     });
   },
@@ -405,6 +417,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
       constructionSequence: sequence,
       materialStats,
       highlightedStepNumber: null,
+      highlightedMaterialGroupTileIds: [],
     });
 
     return { 
@@ -448,6 +461,14 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
 
   setHighlightedStepNumber: (step) => {
     set({ highlightedStepNumber: step });
+  },
+
+  setHighlightedMaterialGroupTileIds: (tileIds) => {
+    set({ highlightedMaterialGroupTileIds: tileIds });
+  },
+
+  clearHighlightedMaterialGroup: () => {
+    set({ highlightedMaterialGroupTileIds: [] });
   },
 
   regenerateDerivedData: () => {

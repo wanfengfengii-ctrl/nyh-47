@@ -1,14 +1,27 @@
 import { Card, Group, Stack, Text, Badge, ScrollArea, Progress, Divider, Box } from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { IconPackages, IconScissors, IconSquare } from '@tabler/icons-react';
+import { IconPackages, IconScissors, IconSquare, IconEye, IconEyeOff } from '@tabler/icons-react';
 
 export default function MaterialStatsPanel() {
-  const { materialStats, setSelectedTile, layout } = useRoofStore();
+  const { materialStats, setSelectedTile, layout, highlightedMaterialGroupTileIds, setHighlightedMaterialGroupTileIds, clearHighlightedMaterialGroup } = useRoofStore();
 
   const handleGroupClick = (tileIds: string[]) => {
-    if (tileIds.length > 0) {
-      setSelectedTile(tileIds[0]);
+    const isAlreadyHighlighted = tileIds.length > 0 && highlightedMaterialGroupTileIds.length > 0 && 
+      tileIds.every(id => highlightedMaterialGroupTileIds.includes(id));
+    
+    if (isAlreadyHighlighted) {
+      clearHighlightedMaterialGroup();
+    } else {
+      setHighlightedMaterialGroupTileIds(tileIds);
+      if (tileIds.length > 0) {
+        setSelectedTile(tileIds[0]);
+      }
     }
+  };
+
+  const isGroupHighlighted = (tileIds: string[]) => {
+    if (tileIds.length === 0 || highlightedMaterialGroupTileIds.length === 0) return false;
+    return tileIds.every(id => highlightedMaterialGroupTileIds.includes(id));
   };
 
   return (
@@ -73,22 +86,27 @@ export default function MaterialStatsPanel() {
             </Text>
             {materialStats.fullTileGroups.map((group) => {
               const percentage = (group.count / materialStats.summary.totalTileCount) * 100;
+              const highlighted = isGroupHighlighted(group.tileIds);
               return (
                 <Box
                   key={group.groupKey}
                   style={{
                     padding: '10px 12px',
                     borderRadius: 8,
-                    border: '1px solid #dcfce7',
-                    background: '#f0fdf4',
+                    border: highlighted ? '2px solid #10b981' : '1px solid #dcfce7',
+                    background: highlighted ? '#d1fae5' : '#f0fdf4',
                     cursor: 'pointer',
+                    boxShadow: highlighted ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none',
                   }}
                   onClick={() => handleGroupClick(group.tileIds)}
                 >
                   <Group justify="space-between" mb="xs">
-                    <Text size="sm" fw={500}>
-                      {group.groupName}
-                    </Text>
+                    <Group gap="xs">
+                      {highlighted && <IconEye size={14} color="#059669" />}
+                      <Text size="sm" fw={500}>
+                        {group.groupName}
+                      </Text>
+                    </Group>
                     <Badge size="sm" variant="filled" color="green">
                       {group.count} 块
                     </Badge>
@@ -114,21 +132,23 @@ export default function MaterialStatsPanel() {
                 </Text>
                 {materialStats.cutTileGroups.map((group) => {
                   const percentage = (group.count / materialStats.summary.totalTileCount) * 100;
+                  const highlighted = isGroupHighlighted(group.tileIds);
                   return (
                     <Box
                       key={group.groupKey}
                       style={{
                         padding: '10px 12px',
                         borderRadius: 8,
-                        border: '1px solid #fef3c7',
-                        background: '#fffbeb',
+                        border: highlighted ? '2px solid #10b981' : '1px solid #fef3c7',
+                        background: highlighted ? '#d1fae5' : '#fffbeb',
                         cursor: 'pointer',
+                        boxShadow: highlighted ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none',
                       }}
                       onClick={() => handleGroupClick(group.tileIds)}
                     >
                       <Group justify="space-between" mb="xs">
                         <Group gap="xs">
-                          <IconScissors size={14} color="#f59e0b" />
+                          {highlighted ? <IconEye size={14} color="#059669" /> : <IconScissors size={14} color="#f59e0b" />}
                           <Text size="sm" fw={500}>
                             {group.groupName}
                           </Text>
@@ -137,7 +157,7 @@ export default function MaterialStatsPanel() {
                           {group.count} 块
                         </Badge>
                       </Group>
-                      <Progress value={percentage} size="sm" color="orange" mb="xs" />
+                      <Progress value={percentage} size="sm" color={highlighted ? 'green' : 'orange'} mb="xs" />
                       <Group justify="space-between">
                         <Text size="xs" c="dimmed">
                           占比 {percentage.toFixed(1)}%
@@ -156,9 +176,27 @@ export default function MaterialStatsPanel() {
       </Card.Section>
 
       <Card.Section p="md" withBorder>
-        <Text size="xs" c="dimmed" ta="center">
-          点击分组可快速定位到首块瓦片
-        </Text>
+        <Group justify="space-between">
+          <Text size="xs" c="dimmed">
+            {highlightedMaterialGroupTileIds.length > 0 
+              ? `已高亮 ${highlightedMaterialGroupTileIds.length} 块瓦片，再次点击可取消`
+              : '点击分组可高亮整组瓦片'}
+          </Text>
+          {highlightedMaterialGroupTileIds.length > 0 && (
+            <Badge 
+              size="sm" 
+              variant="light" 
+              color="gray" 
+              style={{ cursor: 'pointer' }}
+              onClick={clearHighlightedMaterialGroup}
+            >
+              <Group gap="xs">
+                <IconEyeOff size={12} />
+                清除高亮
+              </Group>
+            </Badge>
+          )}
+        </Group>
       </Card.Section>
     </Card>
   );

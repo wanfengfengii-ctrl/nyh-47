@@ -13,7 +13,7 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 5;
 
 export default function RoofCanvas() {
-  const { roof, layout, selectedTileId, setSelectedTile, setManualAdjustment, tiles, validationResult, lastValidationMessage, showTileNumbers, toggleShowTileNumbers, numberingResult, highlightedStepNumber, constructionSequence } = useRoofStore();
+  const { roof, layout, selectedTileId, setSelectedTile, setManualAdjustment, tiles, validationResult, lastValidationMessage, showTileNumbers, toggleShowTileNumbers, numberingResult, highlightedStepNumber, constructionSequence, highlightedMaterialGroupTileIds } = useRoofStore();
   const stageRef = useRef<Konva.Stage>(null);
   const [scale, setScale] = useState(1);
   const [stageSize, setStageSize] = useState({ width: 600, height: 500 });
@@ -24,10 +24,14 @@ export default function RoofCanvas() {
   const boundaryFlatPoints = boundaryPoints.flatMap((p) => [p.x, p.y]);
 
   const highlightedTileIds = useMemo(() => {
-    if (highlightedStepNumber === null) return new Set<string>();
-    const step = constructionSequence.steps.find(s => s.stepNumber === highlightedStepNumber);
-    return step ? new Set(step.tileIds) : new Set<string>();
-  }, [highlightedStepNumber, constructionSequence.steps]);
+    const ids = new Set<string>();
+    if (highlightedStepNumber !== null) {
+      const step = constructionSequence.steps.find(s => s.stepNumber === highlightedStepNumber);
+      if (step) step.tileIds.forEach(id => ids.add(id));
+    }
+    highlightedMaterialGroupTileIds.forEach(id => ids.add(id));
+    return ids;
+  }, [highlightedStepNumber, constructionSequence.steps, highlightedMaterialGroupTileIds]);
 
   const cutTypeLabel = (tile: Tile): string => {
     if (!tile.isCut) return '';
