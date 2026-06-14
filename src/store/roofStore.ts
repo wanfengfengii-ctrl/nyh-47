@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { RoofParams, TileParams, LayoutResult, ProjectData, ValidationResult } from '@/types';
-import { calculateLayout, calculateLayoutWithOriginal, validateOverlapConstraints, validateSingleTileAdjustment } from '@/utils/roofCalculator';
+import { calculateLayout, calculateLayoutWithOriginal, validateOverlapConstraints, validateSingleTileAdjustment, isPointInRoof } from '@/utils/roofCalculator';
 
 interface RoofStore {
   roof: RoofParams;
@@ -103,6 +103,33 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
 
   setManualAdjustment: (tileId, x, y) => {
     const state = get();
+    const tile = state.layout.tiles.find(t => t.id === tileId);
+    
+    if (!tile) {
+      return { success: false, message: '未找到瓦片' };
+    }
+
+    if (x < 0 || y < 0 || x + tile.width > state.roof.width || y + tile.height > state.roof.height) {
+      const clampedX = Math.max(0, Math.min(x, state.roof.width - tile.width));
+      const clampedY = Math.max(0, Math.min(y, state.roof.height - tile.height));
+      const boundaryMsg = `瓦片不能移出屋面边界（X范围: 0~${(state.roof.width - tile.width).toFixed(0)}mm，Y范围: 0~${(state.roof.height - tile.height).toFixed(0)}mm）`;
+      
+      if (x !== clampedX || y !== clampedY) {
+        set({
+          lastValidationMessage: `调整被拦截：${boundaryMsg}`,
+        });
+        return { success: false, message: boundaryMsg };
+      }
+    }
+
+    const tileCenterX = x + tile.width / 2;
+    const tileCenterY = y + tile.height / 2;
+    if (!isPointInRoof(state.roof, tileCenterX, tileCenterY)) {
+      set({
+        lastValidationMessage: '调整被拦截：瓦片中心点必须在屋面区域内',
+      });
+      return { success: false, message: '瓦片中心点必须在屋面区域内' };
+    }
     
     const validation = validateSingleTileAdjustment(
       tileId,

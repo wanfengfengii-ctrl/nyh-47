@@ -1,11 +1,19 @@
 import { Card, Group, Stack, Text, NumberInput, Badge, Button, Alert } from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
 import { IconSquare, IconRefresh, IconAlertTriangle, IconHome } from '@tabler/icons-react';
+import { useState, useCallback, useEffect } from 'react';
 
 export default function TileDetailPanel() {
-  const { layout, selectedTileId, setManualAdjustment, manualAdjustments, clearManualAdjustment, resetTileToOriginal, originalPositions, validationResult, tiles } = useRoofStore();
+  const { roof, layout, selectedTileId, setManualAdjustment, manualAdjustments, clearManualAdjustment, resetTileToOriginal, originalPositions, validationResult, tiles, lastValidationMessage } = useRoofStore();
+  const [inputErrorMessage, setInputErrorMessage] = useState('');
 
   const selectedTile = layout.tiles.find((t) => t.id === selectedTileId);
+
+  useEffect(() => {
+    if (!selectedTileId) {
+      setInputErrorMessage('');
+    }
+  }, [selectedTileId]);
 
   if (!selectedTile) {
     return (
@@ -32,22 +40,44 @@ export default function TileDetailPanel() {
   const hasViolation = validationResult.invalidTileIds.includes(selectedTile.id);
   const tileViolations = validationResult.violations.filter(v => v.tileId === selectedTile.id);
 
-  const handleXChange = (value: number | string) => {
-    const num = Number(value) || 0;
-    setManualAdjustment(selectedTile.id, num, displayY);
-  };
+  const maxX = Math.max(0, roof.width - selectedTile.width);
+  const maxY = Math.max(0, roof.height - selectedTile.height);
 
-  const handleYChange = (value: number | string) => {
+  const showTempError = useCallback((msg: string) => {
+    setInputErrorMessage(msg);
+    setTimeout(() => {
+      setInputErrorMessage('');
+    }, 3000);
+  }, []);
+
+  const handleXChange = useCallback((value: number | string) => {
     const num = Number(value) || 0;
-    setManualAdjustment(selectedTile.id, displayX, num);
-  };
+    const result = setManualAdjustment(selectedTile.id, num, displayY);
+    if (!result.success) {
+      showTempError(result.message);
+    } else {
+      setInputErrorMessage('');
+    }
+  }, [selectedTile.id, displayY, setManualAdjustment, showTempError]);
+
+  const handleYChange = useCallback((value: number | string) => {
+    const num = Number(value) || 0;
+    const result = setManualAdjustment(selectedTile.id, displayX, num);
+    if (!result.success) {
+      showTempError(result.message);
+    } else {
+      setInputErrorMessage('');
+    }
+  }, [selectedTile.id, displayX, setManualAdjustment, showTempError]);
 
   const handleReset = () => {
     clearManualAdjustment(selectedTile.id);
+    setInputErrorMessage('');
   };
 
   const handleResetToOriginal = () => {
     resetTileToOriginal(selectedTile.id);
+    setInputErrorMessage('');
   };
 
   return (
@@ -146,22 +176,37 @@ export default function TileDetailPanel() {
 
           <Text size="sm" fw={500} mt="xs">位置调整</Text>
 
+          {inputErrorMessage && (
+            <Alert
+              icon={<IconAlertTriangle size={16} />}
+              title="调整被拦截"
+              color="orange"
+              variant="light"
+            >
+              <Text size="sm">{inputErrorMessage}</Text>
+            </Alert>
+          )}
+
           <Group grow>
             <NumberInput
               label="X 坐标 (mm)"
+              description={`允许范围: 0 ~ ${Math.round(maxX)}`}
               value={Math.round(displayX)}
               onChange={handleXChange}
               min={0}
+              max={maxX}
               size="sm"
-              error={hasViolation}
+              error={hasViolation || !!inputErrorMessage}
             />
             <NumberInput
               label="Y 坐标 (mm)"
+              description={`允许范围: 0 ~ ${Math.round(maxY)}`}
               value={Math.round(displayY)}
               onChange={handleYChange}
               min={0}
+              max={maxY}
               size="sm"
-              error={hasViolation}
+              error={hasViolation || !!inputErrorMessage}
             />
           </Group>
 
