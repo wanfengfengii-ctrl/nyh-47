@@ -1,6 +1,6 @@
 import { Card, Group, NumberInput, Select, Stack, Text } from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { validateTileParams } from '@/utils/roofCalculator';
+import { validateTileParams } from '@/domains/layout';
 import { IconLayoutGrid } from '@tabler/icons-react';
 import { type TileParams } from '@/types';
 

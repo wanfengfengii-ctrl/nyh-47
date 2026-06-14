@@ -1,152 +1,57 @@
-import { Card, Group, Stack, Text, Badge, Button, Switch, TextInput, Checkbox, Divider, ActionIcon, Tooltip, ScrollArea, Modal, Box } from '@mantine/core';
+import {
+  Card,
+  Group,
+  Stack,
+  Text,
+  Badge,
+  Button,
+  Switch,
+  TextInput,
+  Checkbox,
+  Divider,
+  ActionIcon,
+  Tooltip,
+  ScrollArea,
+  Modal,
+  Box,
+} from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { IconPrinter, IconFileExport, IconFilter, IconRefresh, IconSearch, IconX, IconCheck, IconListNumbers, IconListCheck, IconPackages, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
-import { useState, useMemo } from 'react';
+import {
+  IconPrinter,
+  IconFileExport,
+  IconRefresh,
+  IconSearch,
+  IconX,
+  IconListNumbers,
+  IconListCheck,
+  IconPackages,
+  IconChevronDown,
+  IconChevronUp,
+} from '@tabler/icons-react';
+import { useState } from 'react';
 import type { Tile } from '@/types';
+import { useChecklistFilter } from '@/hooks/useChecklistFilter';
 
 export default function ConstructionListPanel() {
-  const {
-    layout,
-    numberingResult,
-    materialStats,
-    constructionSequence,
-    listFilter,
-    setListFilter,
-    resetListFilter,
-    printFilteredConstructionList,
-    printConstructionList,
-    focusAndHighlightTile,
-    focusedTileId,
-  } = useRoofStore();
+  const printFilteredConstructionList = useRoofStore(
+    (s) => s.printFilteredConstructionList
+  );
+  const printConstructionList = useRoofStore((s) => s.printConstructionList);
+  const focusAndHighlightTile = useRoofStore((s) => s.focusAndHighlightTile);
+  const focusedTileId = useRoofStore((s) => s.focusedTileId);
+  const numberingResult = useRoofStore((s) => s.numberingResult);
+  const layout = useRoofStore((s) => s.layout);
 
   const [searchKeyword, setSearchKeyword] = useState('');
   const [showStepSelector, setShowStepSelector] = useState(false);
   const [showGroupSelector, setShowGroupSelector] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
-  const filteredTiles = useMemo(() => {
-    let tiles = [...layout.tiles];
-
-    if (!listFilter.includeFullTiles) {
-      tiles = tiles.filter(t => t.isCut);
-    }
-    if (!listFilter.includeCutTiles) {
-      tiles = tiles.filter(t => !t.isCut);
-    }
-
-    if (listFilter.selectedGroups.length > 0) {
-      const groupTileIds = new Set<string>();
-      materialStats.groups
-        .filter(g => listFilter.selectedGroups.includes(g.groupKey))
-        .forEach(g => g.tileIds.forEach(id => groupTileIds.add(id)));
-      tiles = tiles.filter(t => groupTileIds.has(t.id));
-    }
-
-    if (listFilter.selectedSteps.length > 0) {
-      const stepTileIds = new Set<string>();
-      constructionSequence.steps
-        .filter(s => listFilter.selectedSteps.includes(s.stepNumber))
-        .forEach(s => s.tileIds.forEach(id => stepTileIds.add(id)));
-      tiles = tiles.filter(t => stepTileIds.has(t.id));
-    }
-
-    if (searchKeyword.trim()) {
-      const kw = searchKeyword.toLowerCase();
-      tiles = tiles.filter(t => {
-        const num = numberingResult.numberingMap[t.id];
-        return (
-          num?.displayNumber.toLowerCase().includes(kw) ||
-          t.id.toLowerCase().includes(kw) ||
-          String(t.row + 1).includes(kw) ||
-          String(t.col + 1).includes(kw)
-        );
-      });
-    }
-
-    return tiles;
-  }, [layout.tiles, listFilter, materialStats.groups, constructionSequence.steps, numberingResult.numberingMap, searchKeyword]);
-
-  const hasActiveFilter = useMemo(() => {
-    return (
-      !listFilter.includeFullTiles ||
-      !listFilter.includeCutTiles ||
-      listFilter.selectedGroups.length > 0 ||
-      listFilter.selectedSteps.length > 0 ||
-      searchKeyword.trim() !== ''
-    );
-  }, [listFilter, searchKeyword]);
-
-  const filteredGroups = useMemo(() => {
-    if (listFilter.selectedGroups.length > 0) {
-      return materialStats.groups.filter(g => listFilter.selectedGroups.includes(g.groupKey));
-    }
-    const tileIdSet = new Set(filteredTiles.map(t => t.id));
-    return materialStats.groups
-      .map(g => ({
-        ...g,
-        count: g.tileIds.filter(id => tileIdSet.has(id)).length,
-        tileIds: g.tileIds.filter(id => tileIdSet.has(id)),
-        totalArea: g.tileIds.filter(id => tileIdSet.has(id)).reduce((sum, id) => {
-          const tile = layout.tiles.find(t => t.id === id);
-          return sum + (tile ? tile.width * tile.height : 0);
-        }, 0),
-      }))
-      .filter(g => g.count > 0);
-  }, [materialStats.groups, filteredTiles, listFilter.selectedGroups, layout.tiles]);
-
-  const filteredSteps = useMemo(() => {
-    if (listFilter.selectedSteps.length > 0) {
-      return constructionSequence.steps.filter(s => listFilter.selectedSteps.includes(s.stepNumber));
-    }
-    const tileIdSet = new Set(filteredTiles.map(t => t.id));
-    return constructionSequence.steps
-      .map(s => ({
-        ...s,
-        tileIds: s.tileIds.filter(id => tileIdSet.has(id)),
-      }))
-      .filter(s => s.tileIds.length > 0);
-  }, [constructionSequence.steps, filteredTiles, listFilter.selectedSteps]);
-
-  const filteredTotalArea = filteredTiles.reduce((sum, t) => sum + t.width * t.height, 0);
-
-  const toggleGroup = (groupKey: string) => {
-    const isSelected = listFilter.selectedGroups.includes(groupKey);
-    const newGroups = isSelected
-      ? listFilter.selectedGroups.filter(g => g !== groupKey)
-      : [...listFilter.selectedGroups, groupKey];
-    setListFilter({ selectedGroups: newGroups });
-  };
-
-  const toggleStep = (stepNumber: number) => {
-    const isSelected = listFilter.selectedSteps.includes(stepNumber);
-    const newSteps = isSelected
-      ? listFilter.selectedSteps.filter(s => s !== stepNumber)
-      : [...listFilter.selectedSteps, stepNumber];
-    setListFilter({ selectedSteps: newSteps });
-  };
-
-  const selectAllGroups = () => {
-    setListFilter({ selectedGroups: materialStats.groups.map(g => g.groupKey) });
-  };
-
-  const clearGroupFilter = () => {
-    setListFilter({ selectedGroups: [] });
-  };
-
-  const selectAllSteps = () => {
-    setListFilter({ selectedSteps: constructionSequence.steps.map(s => s.stepNumber) });
-  };
-
-  const clearStepFilter = () => {
-    setListFilter({ selectedSteps: [] });
-  };
+  const filter = useChecklistFilter(searchKeyword);
 
   const handleTileClick = (tile: Tile) => {
     focusAndHighlightTile(tile.id);
   };
-
-  const allGroupsSelected = listFilter.selectedGroups.length === materialStats.groups.length;
-  const allStepsSelected = listFilter.selectedSteps.length === constructionSequence.totalSteps;
 
   return (
     <Card withBorder shadow="sm" radius="md">
@@ -157,7 +62,7 @@ export default function ConstructionListPanel() {
             <Text fw={600} size="lg">施工清单</Text>
           </Group>
           <Badge variant="light" color="blue">
-            {filteredTiles.length} 块
+            {filter.filteredTiles.length} 块
           </Badge>
         </Group>
       </Card.Section>
@@ -182,8 +87,8 @@ export default function ConstructionListPanel() {
           <Group gap="xs">
             <Switch
               size="xs"
-              checked={listFilter.includeFullTiles}
-              onChange={(e) => setListFilter({ includeFullTiles: e.currentTarget.checked })}
+              checked={filter.filter.includeFullTiles}
+              onChange={(e) => filter.setFilter({ includeFullTiles: e.currentTarget.checked })}
               label={
                 <Text size="xs" c="green">
                   完整瓦
@@ -192,8 +97,8 @@ export default function ConstructionListPanel() {
             />
             <Switch
               size="xs"
-              checked={listFilter.includeCutTiles}
-              onChange={(e) => setListFilter({ includeCutTiles: e.currentTarget.checked })}
+              checked={filter.filter.includeCutTiles}
+              onChange={(e) => filter.setFilter({ includeCutTiles: e.currentTarget.checked })}
               label={
                 <Text size="xs" c="orange">
                   裁切瓦
@@ -210,9 +115,9 @@ export default function ConstructionListPanel() {
               <Text size="xs" fw={500}>
                 材料分组筛选
               </Text>
-              {listFilter.selectedGroups.length > 0 && (
+              {filter.filter.selectedGroups.length > 0 && (
                 <Badge size="xs" variant="light" color="orange">
-                  {listFilter.selectedGroups.length}/{materialStats.groups.length}
+                  {filter.filter.selectedGroups.length}/{filter.filteredGroups.length}
                 </Badge>
               )}
             </Group>
@@ -221,7 +126,11 @@ export default function ConstructionListPanel() {
               variant="subtle"
               onClick={() => setShowGroupSelector(!showGroupSelector)}
             >
-              {showGroupSelector ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+              {showGroupSelector ? (
+                <IconChevronUp size={14} />
+              ) : (
+                <IconChevronDown size={14} />
+              )}
             </ActionIcon>
           </Group>
 
@@ -237,13 +146,15 @@ export default function ConstructionListPanel() {
               <Group justify="space-between" mb="xs">
                 <Checkbox
                   size="xs"
-                  checked={allGroupsSelected}
-                  onChange={() => allGroupsSelected ? clearGroupFilter() : selectAllGroups()}
+                  checked={filter.allGroupsSelected}
+                  onChange={() =>
+                    filter.allGroupsSelected ? filter.clearGroupFilter() : filter.selectAllGroups()
+                  }
                   label={<Text size="11px">全选</Text>}
                 />
-                {listFilter.selectedGroups.length > 0 && (
+                {filter.filter.selectedGroups.length > 0 && (
                   <Tooltip label="清除">
-                    <ActionIcon size="xs" variant="light" color="gray" onClick={clearGroupFilter}>
+                    <ActionIcon size="xs" variant="light" color="gray" onClick={filter.clearGroupFilter}>
                       <IconX size={12} />
                     </ActionIcon>
                   </Tooltip>
@@ -251,12 +162,12 @@ export default function ConstructionListPanel() {
               </Group>
               <ScrollArea h={100} type="hover">
                 <Stack gap="xs">
-                  {materialStats.groups.map((group) => (
+                  {filter.filteredGroups.map((group) => (
                     <Checkbox
                       key={group.groupKey}
                       size="xs"
-                      checked={listFilter.selectedGroups.includes(group.groupKey)}
-                      onChange={() => toggleGroup(group.groupKey)}
+                      checked={filter.filter.selectedGroups.includes(group.groupKey)}
+                      onChange={() => filter.toggleGroupInFilter(group.groupKey)}
                       label={
                         <Text size="11px">
                           {group.groupName} ({group.count}块)
@@ -275,9 +186,9 @@ export default function ConstructionListPanel() {
               <Text size="xs" fw={500}>
                 施工步骤筛选
               </Text>
-              {listFilter.selectedSteps.length > 0 && (
+              {filter.filter.selectedSteps.length > 0 && (
                 <Badge size="xs" variant="light" color="teal">
-                  {listFilter.selectedSteps.length}/{constructionSequence.totalSteps}
+                  {filter.filter.selectedSteps.length}/{filter.filteredSteps.length}
                 </Badge>
               )}
             </Group>
@@ -286,7 +197,11 @@ export default function ConstructionListPanel() {
               variant="subtle"
               onClick={() => setShowStepSelector(!showStepSelector)}
             >
-              {showStepSelector ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+              {showStepSelector ? (
+                <IconChevronUp size={14} />
+              ) : (
+                <IconChevronDown size={14} />
+              )}
             </ActionIcon>
           </Group>
 
@@ -302,13 +217,15 @@ export default function ConstructionListPanel() {
               <Group justify="space-between" mb="xs">
                 <Checkbox
                   size="xs"
-                  checked={allStepsSelected}
-                  onChange={() => allStepsSelected ? clearStepFilter() : selectAllSteps()}
+                  checked={filter.allStepsSelected}
+                  onChange={() =>
+                    filter.allStepsSelected ? filter.clearStepFilter() : filter.selectAllSteps()
+                  }
                   label={<Text size="11px">全选</Text>}
                 />
-                {listFilter.selectedSteps.length > 0 && (
+                {filter.filter.selectedSteps.length > 0 && (
                   <Tooltip label="清除">
-                    <ActionIcon size="xs" variant="light" color="gray" onClick={clearStepFilter}>
+                    <ActionIcon size="xs" variant="light" color="gray" onClick={filter.clearStepFilter}>
                       <IconX size={12} />
                     </ActionIcon>
                   </Tooltip>
@@ -316,12 +233,12 @@ export default function ConstructionListPanel() {
               </Group>
               <ScrollArea h={100} type="hover">
                 <Stack gap="xs">
-                  {constructionSequence.steps.map((step) => (
+                  {filter.filteredSteps.map((step) => (
                     <Checkbox
                       key={step.stepNumber}
                       size="xs"
-                      checked={listFilter.selectedSteps.includes(step.stepNumber)}
-                      onChange={() => toggleStep(step.stepNumber)}
+                      checked={filter.filter.selectedSteps.includes(step.stepNumber)}
+                      onChange={() => filter.toggleStepInFilter(step.stepNumber)}
                       label={
                         <Text size="11px">
                           第{step.stepNumber}步 ({step.tileIds.length}块)
@@ -340,7 +257,7 @@ export default function ConstructionListPanel() {
         <Stack gap="xs">
           <Group justify="space-between">
             <Text size="xs" c="dimmed">筛选结果</Text>
-            {hasActiveFilter && (
+            {filter.hasActiveFilter && (
               <Badge size="xs" variant="light" color="blue">
                 已筛选
               </Badge>
@@ -350,32 +267,32 @@ export default function ConstructionListPanel() {
             <div>
               <Text size="10px" c="dimmed">瓦片数</Text>
               <Text fw={700} size="md">
-                {filteredTiles.length}
+                {filter.filteredTotalCount}
               </Text>
             </div>
             <div>
               <Text size="10px" c="dimmed">材料组数</Text>
               <Text fw={700} size="md">
-                {filteredGroups.length}
+                {filter.filteredGroups.length}
               </Text>
             </div>
             <div>
               <Text size="10px" c="dimmed">施工步数</Text>
               <Text fw={700} size="md">
-                {filteredSteps.length}
+                {filter.filteredSteps.length}
               </Text>
             </div>
           </Group>
           <Group justify="space-between">
             <Text size="10px" c="dimmed">总面积</Text>
             <Text size="sm" fw={600}>
-              {(filteredTotalArea / 1000000).toFixed(4)} m²
+              {(filter.filteredTotalArea / 1000000).toFixed(4)} m²
             </Text>
           </Group>
           <Group justify="space-between">
             <Text size="10px" c="dimmed">占总数比</Text>
             <Text size="sm" fw={600}>
-              {layout.tiles.length > 0 ? ((filteredTiles.length / layout.tiles.length) * 100).toFixed(1) : 0}%
+              {filter.filteredPercentage.toFixed(1)}%
             </Text>
           </Group>
         </Stack>
@@ -389,9 +306,13 @@ export default function ConstructionListPanel() {
               leftSection={<IconPrinter size={14} />}
               variant="filled"
               color="blue"
-              onClick={() => (hasActiveFilter ? printFilteredConstructionList() : printConstructionList())}
+              onClick={() =>
+                filter.hasActiveFilter
+                  ? printFilteredConstructionList()
+                  : printConstructionList()
+              }
             >
-              {hasActiveFilter ? '打印筛选清单' : '打印完整清单'}
+              {filter.hasActiveFilter ? '打印筛选清单' : '打印完整清单'}
             </Button>
             <Button
               size="sm"
@@ -403,13 +324,13 @@ export default function ConstructionListPanel() {
               预览明细
             </Button>
           </Group>
-          {hasActiveFilter && (
+          {filter.hasActiveFilter && (
             <Button
               size="sm"
               variant="subtle"
               color="gray"
               leftSection={<IconRefresh size={14} />}
-              onClick={resetListFilter}
+              onClick={filter.resetFilter}
             >
               重置筛选条件
             </Button>
@@ -420,20 +341,26 @@ export default function ConstructionListPanel() {
       <Modal
         opened={showPreview}
         onClose={() => setShowPreview(false)}
-        title={`施工清单预览（${filteredTiles.length} 块）`}
+        title={`施工清单预览（${filter.filteredTiles.length} 块）`}
         size="lg"
       >
         <Stack gap="md">
           <Group justify="space-between">
             <Badge variant="light" color="blue">
-              共 {filteredTiles.length} 块瓦片
+              共 {filter.filteredTiles.length} 块瓦片
             </Badge>
             <Button
               size="xs"
               leftSection={<IconPrinter size={14} />}
               onClick={() => {
                 setShowPreview(false);
-                setTimeout(() => (hasActiveFilter ? printFilteredConstructionList() : printConstructionList()), 100);
+                setTimeout(
+                  () =>
+                    filter.hasActiveFilter
+                      ? printFilteredConstructionList()
+                      : printConstructionList(),
+                  100
+                );
               }}
             >
               打印
@@ -445,7 +372,7 @@ export default function ConstructionListPanel() {
           <Text size="sm" fw={500}>瓦片明细</Text>
           <ScrollArea h={300} type="hover">
             <Stack gap="xs">
-              {filteredTiles.map((tile) => {
+              {filter.filteredTiles.map((tile) => {
                 const num = numberingResult.numberingMap[tile.id];
                 const isFocused = focusedTileId === tile.id;
                 return (
@@ -480,7 +407,7 @@ export default function ConstructionListPanel() {
                   </Group>
                 );
               })}
-              {filteredTiles.length === 0 && (
+              {filter.filteredTiles.length === 0 && (
                 <Text size="sm" c="dimmed" ta="center" py="md">
                   没有匹配的瓦片
                 </Text>
@@ -496,3 +423,5 @@ export default function ConstructionListPanel() {
     </Card>
   );
 }
+
+void IconListNumbers;

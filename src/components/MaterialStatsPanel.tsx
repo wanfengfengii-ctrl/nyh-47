@@ -1,26 +1,54 @@
-import { Card, Group, Stack, Text, Badge, ScrollArea, Progress, Divider, Box, Checkbox, ActionIcon, Tooltip } from '@mantine/core';
+import {
+  Card,
+  Group,
+  Stack,
+  Text,
+  Badge,
+  ScrollArea,
+  Progress,
+  Divider,
+  Box,
+  Checkbox,
+  ActionIcon,
+  Tooltip,
+} from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { IconPackages, IconScissors, IconSquare, IconEye, IconEyeOff, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
+import {
+  IconPackages,
+  IconScissors,
+  IconSquare,
+  IconEye,
+  IconEyeOff,
+  IconChevronDown,
+  IconChevronUp,
+} from '@tabler/icons-react';
 import { useState } from 'react';
+import { isGroupHighlighted, toggleGroupSelectionInFilter } from '@/domains/selection';
 
 export default function MaterialStatsPanel() {
-  const {
-    materialStats,
-    setSelectedTile,
-    layout,
-    highlightedMaterialGroupTileIds,
-    setHighlightedMaterialGroupTileIds,
-    clearHighlightedMaterialGroup,
-    listFilter,
-    setListFilter,
-    numberingResult,
-  } = useRoofStore();
+  const materialStats = useRoofStore((s) => s.materialStats);
+  const setSelectedTile = useRoofStore((s) => s.setSelectedTile);
+  const layout = useRoofStore((s) => s.layout);
+  const highlightedMaterialGroupTileIds = useRoofStore(
+    (s) => s.highlightedMaterialGroupTileIds
+  );
+  const setHighlightedMaterialGroupTileIds = useRoofStore(
+    (s) => s.setHighlightedMaterialGroupTileIds
+  );
+  const clearHighlightedMaterialGroup = useRoofStore(
+    (s) => s.clearHighlightedMaterialGroup
+  );
+  const listFilter = useRoofStore((s) => s.listFilter);
+  const setListFilter = useRoofStore((s) => s.setListFilter);
+  const numberingResult = useRoofStore((s) => s.numberingResult);
 
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   const handleGroupClick = (groupKey: string, tileIds: string[]) => {
-    const isAlreadyHighlighted = tileIds.length > 0 && highlightedMaterialGroupTileIds.length > 0 &&
-      tileIds.every(id => highlightedMaterialGroupTileIds.includes(id));
+    const isAlreadyHighlighted = isGroupHighlighted(
+      tileIds,
+      highlightedMaterialGroupTileIds
+    );
 
     if (isAlreadyHighlighted) {
       clearHighlightedMaterialGroup();
@@ -33,26 +61,14 @@ export default function MaterialStatsPanel() {
     setExpandedGroup(groupKey === expandedGroup ? null : groupKey);
   };
 
-  const isGroupHighlighted = (tileIds: string[]) => {
-    if (tileIds.length === 0 || highlightedMaterialGroupTileIds.length === 0) return false;
-    return tileIds.every(id => highlightedMaterialGroupTileIds.includes(id));
-  };
-
-  const isGroupInFilter = (groupKey: string) => {
-    return listFilter.selectedGroups.includes(groupKey);
-  };
-
   const toggleGroupFilter = (groupKey: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const isSelected = listFilter.selectedGroups.includes(groupKey);
-    const newGroups = isSelected
-      ? listFilter.selectedGroups.filter(g => g !== groupKey)
-      : [...listFilter.selectedGroups, groupKey];
-    setListFilter({ selectedGroups: newGroups });
+    const patch = toggleGroupSelectionInFilter(listFilter, groupKey);
+    setListFilter(patch);
   };
 
   const selectAllGroups = () => {
-    const allKeys = materialStats.groups.map(g => g.groupKey);
+    const allKeys = materialStats.groups.map((g) => g.groupKey);
     setListFilter({ selectedGroups: allKeys });
   };
 
@@ -121,7 +137,7 @@ export default function MaterialStatsPanel() {
               <Checkbox
                 size="xs"
                 checked={allGroupsSelected}
-                onChange={() => allGroupsSelected ? clearGroupFilter() : selectAllGroups()}
+                onChange={() => (allGroupsSelected ? clearGroupFilter() : selectAllGroups())}
                 label={
                   <Text size="xs" fw={500}>
                     筛选材料分组
@@ -154,8 +170,8 @@ export default function MaterialStatsPanel() {
             </Text>
             {materialStats.fullTileGroups.map((group) => {
               const percentage = (group.count / materialStats.summary.totalTileCount) * 100;
-              const highlighted = isGroupHighlighted(group.tileIds);
-              const isFiltered = isGroupInFilter(group.groupKey);
+              const highlighted = isGroupHighlighted(group.tileIds, highlightedMaterialGroupTileIds);
+              const isFiltered = listFilter.selectedGroups.includes(group.groupKey);
               const isExpanded = expandedGroup === group.groupKey;
 
               return (
@@ -164,8 +180,14 @@ export default function MaterialStatsPanel() {
                     style={{
                       padding: '10px 12px',
                       borderRadius: 8,
-                      border: `2px solid ${highlighted ? '#10b981' : isFiltered ? '#3b82f6' : '#dcfce7'}`,
-                      background: highlighted ? '#d1fae5' : isFiltered ? '#eff6ff' : '#f0fdf4',
+                      border: `2px solid ${
+                        highlighted ? '#10b981' : isFiltered ? '#3b82f6' : '#dcfce7'
+                      }`,
+                      background: highlighted
+                        ? '#d1fae5'
+                        : isFiltered
+                        ? '#eff6ff'
+                        : '#f0fdf4',
                       cursor: 'pointer',
                       boxShadow: highlighted ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none',
                       transition: 'all 0.15s ease',
@@ -177,7 +199,9 @@ export default function MaterialStatsPanel() {
                         <Checkbox
                           size="sm"
                           checked={isFiltered}
-                          onClick={(e) => toggleGroupFilter(group.groupKey, e as unknown as React.MouseEvent)}
+                          onClick={(e) =>
+                            toggleGroupFilter(group.groupKey, e as unknown as React.MouseEvent)
+                          }
                           readOnly
                         />
                         {highlighted && <IconEye size={14} color="#059669" />}
@@ -187,14 +211,23 @@ export default function MaterialStatsPanel() {
                       </Group>
                       <Group gap="xs">
                         <ActionIcon size="xs" variant="subtle" color="gray">
-                          {isExpanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+                          {isExpanded ? (
+                            <IconChevronUp size={14} />
+                          ) : (
+                            <IconChevronDown size={14} />
+                          )}
                         </ActionIcon>
                         <Badge size="sm" variant="filled" color="green">
                           {group.count} 块
                         </Badge>
                       </Group>
                     </Group>
-                    <Progress value={percentage} size="sm" color={highlighted ? 'teal' : 'green'} mb="xs" />
+                    <Progress
+                      value={percentage}
+                      size="sm"
+                      color={highlighted ? 'teal' : 'green'}
+                      mb="xs"
+                    />
                     <Group justify="space-between">
                       <Text size="xs" c="dimmed">
                         占比 {percentage.toFixed(1)}%
@@ -256,9 +289,10 @@ export default function MaterialStatsPanel() {
                   ■ 裁切瓦
                 </Text>
                 {materialStats.cutTileGroups.map((group) => {
-                  const percentage = (group.count / materialStats.summary.totalTileCount) * 100;
-                  const highlighted = isGroupHighlighted(group.tileIds);
-                  const isFiltered = isGroupInFilter(group.groupKey);
+                  const percentage =
+                    (group.count / materialStats.summary.totalTileCount) * 100;
+                  const highlighted = isGroupHighlighted(group.tileIds, highlightedMaterialGroupTileIds);
+                  const isFiltered = listFilter.selectedGroups.includes(group.groupKey);
                   const isExpanded = expandedGroup === group.groupKey;
 
                   return (
@@ -267,8 +301,14 @@ export default function MaterialStatsPanel() {
                         style={{
                           padding: '10px 12px',
                           borderRadius: 8,
-                          border: `2px solid ${highlighted ? '#10b981' : isFiltered ? '#3b82f6' : '#fef3c7'}`,
-                          background: highlighted ? '#d1fae5' : isFiltered ? '#eff6ff' : '#fffbeb',
+                          border: `2px solid ${
+                            highlighted ? '#10b981' : isFiltered ? '#3b82f6' : '#fef3c7'
+                          }`,
+                          background: highlighted
+                            ? '#d1fae5'
+                            : isFiltered
+                            ? '#eff6ff'
+                            : '#fffbeb',
                           cursor: 'pointer',
                           boxShadow: highlighted ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none',
                           transition: 'all 0.15s ease',
@@ -280,24 +320,39 @@ export default function MaterialStatsPanel() {
                             <Checkbox
                               size="sm"
                               checked={isFiltered}
-                              onClick={(e) => toggleGroupFilter(group.groupKey, e as unknown as React.MouseEvent)}
+                              onClick={(e) =>
+                                toggleGroupFilter(group.groupKey, e as unknown as React.MouseEvent)
+                              }
                               readOnly
                             />
-                            {highlighted ? <IconEye size={14} color="#059669" /> : <IconScissors size={14} color="#f59e0b" />}
+                            {highlighted ? (
+                              <IconEye size={14} color="#059669" />
+                            ) : (
+                              <IconScissors size={14} color="#f59e0b" />
+                            )}
                             <Text size="sm" fw={500}>
                               {group.groupName}
                             </Text>
                           </Group>
                           <Group gap="xs">
                             <ActionIcon size="xs" variant="subtle" color="gray">
-                              {isExpanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+                              {isExpanded ? (
+                                <IconChevronUp size={14} />
+                              ) : (
+                                <IconChevronDown size={14} />
+                              )}
                             </ActionIcon>
                             <Badge size="sm" variant="filled" color="orange">
                               {group.count} 块
                             </Badge>
                           </Group>
                         </Group>
-                        <Progress value={percentage} size="sm" color={highlighted ? 'green' : 'orange'} mb="xs" />
+                        <Progress
+                          value={percentage}
+                          size="sm"
+                          color={highlighted ? 'green' : 'orange'}
+                          mb="xs"
+                        />
                         <Group justify="space-between">
                           <Text size="xs" c="dimmed">
                             占比 {percentage.toFixed(1)}%

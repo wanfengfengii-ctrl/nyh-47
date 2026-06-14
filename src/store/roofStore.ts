@@ -1,26 +1,143 @@
 import { create } from 'zustand';
-import type { RoofParams, TileParams, LayoutResult, ProjectData, ValidationResult, NumberingScheme, NumberingResult, MaterialStatsResult, ConstructionDirection, ConstructionSequenceResult, ConstructionListExportData, SelectionMode, ConstructionListFilter, HighlightSource } from '@/types';
-import { calculateLayoutWithOriginal, validateOverlapConstraints, validateSingleTileAdjustment, isPointInRoof, generateTileNumbering, calculateMaterialStats, generateConstructionSequence, generateConstructionListExportData, generatePrintableConstructionListHTML, generateFilteredPrintableConstructionListHTML } from '@/utils/roofCalculator';
+import type {
+  RoofParams,
+  TileParams,
+  ProjectData,
+  NumberingScheme,
+  ConstructionDirection,
+  ConstructionListExportData,
+  SelectionMode,
+  ConstructionListFilter,
+  HighlightSource,
+} from '@/types';
+
+import {
+  deriveFullLayoutState,
+  computeLayoutWithOriginals,
+  validateOverlapConstraints,
+  validateSingleTileAdjustment,
+  isPointInRoof,
+  buildPostChangeValidationMessage,
+  buildValidationMessage,
+  type LayoutManualAdjustments,
+  type OriginalPositionMap,
+  type SingleTileAdjustmentValidation,
+} from '@/domains/layout';
+
+import {
+  generateTileNumbering,
+} from '@/domains/numbering';
+
+import {
+  calculateMaterialStats,
+  generateConstructionSequence,
+  DEFAULT_LIST_FILTER,
+} from '@/domains/checklist';
+
+import {
+  buildSelectionChange,
+  buildToggleSelection,
+  buildStepHighlightChange,
+  buildMaterialHighlightChange,
+  selectTilesInRect as selectInRect,
+  toggleGroupSelectionInFilter,
+  toggleStepSelectionInFilter,
+} from '@/domains/selection';
+
+import {
+  buildProjectExport,
+  buildImportWarnings,
+  validateProjectData,
+  buildAndExportConstructionListHTML,
+  buildAndPrintConstructionList,
+  buildAndPrintFilteredConstructionList,
+  getExportData,
+} from '@/domains/export';
+
+interface DerivedStateChunk {
+  layout: ReturnType<typeof computeLayoutWithOriginals>['layout'];
+  originalPositions: OriginalPositionMap;
+  validationResult: ReturnType<typeof validateOverlapConstraints>;
+  numberingResult: ReturnType<typeof generateTileNumbering>;
+  constructionSequence: ReturnType<typeof generateConstructionSequence>;
+  materialStats: ReturnType<typeof calculateMaterialStats>;
+}
+
+interface HighlightResetChunk {
+  highlightedStepNumber: null;
+  highlightedMaterialGroupTileIds: string[];
+}
+
+const HIGHLIGHT_RESET: HighlightResetChunk = {
+  highlightedStepNumber: null,
+  highlightedMaterialGroupTileIds: [],
+};
+
+function deriveAllFromState(
+  roof: RoofParams,
+  tiles: TileParams,
+  manualAdjustments: LayoutManualAdjustments,
+  numberingScheme: NumberingScheme,
+  constructionDirection: ConstructionDirection
+): DerivedStateChunk {
+  const layoutResult = deriveFullLayoutState({ roof, tiles, manualAdjustments });
+  return {
+    layout: layoutResult.layout,
+    originalPositions: layoutResult.originalPositions,
+    validationResult: layoutResult.validation,
+    numberingResult: generateTileNumbering(layoutResult.layout.tiles, numberingScheme),
+    constructionSequence: generateConstructionSequence(layoutResult.layout.tiles, constructionDirection),
+    materialStats: calculateMaterialStats(layoutResult.layout.tiles),
+  };
+}
+
+const defaultRoof: RoofParams = {
+  shape: 'rectangle',
+  width: 600,
+  height: 400,
+  topWidth: 360,
+  curveDepth: 80,
+};
+
+const defaultTiles: TileParams = {
+  tileType: 'round',
+  width: 40,
+  length: 60,
+  overlapX: 10,
+  overlapY: 15,
+  minOverlapX: 5,
+  minOverlapY: 8,
+};
+
+const defaultListFilter: ConstructionListFilter = DEFAULT_LIST_FILTER;
+
+const initialDerived = deriveAllFromState(
+  defaultRoof,
+  defaultTiles,
+  {},
+  'slope-row-col',
+  'bottom-up'
+);
 
 interface RoofStore {
   roof: RoofParams;
   tiles: TileParams;
-  layout: LayoutResult;
-  manualAdjustments: Record<string, { x: number; y: number }>;
-  originalPositions: Record<string, { x: number; y: number }>;
+  layout: DerivedStateChunk['layout'];
+  manualAdjustments: LayoutManualAdjustments;
+  originalPositions: OriginalPositionMap;
   selectedTileId: string | null;
   selectedTileIds: string[];
   selectionMode: SelectionMode;
   wasteThreshold: number;
   showWasteWarning: boolean;
-  validationResult: ValidationResult;
+  validationResult: DerivedStateChunk['validationResult'];
   lastValidationMessage: string;
-  importValidationResult: ValidationResult | null;
+  importValidationResult: DerivedStateChunk['validationResult'] | null;
   numberingScheme: NumberingScheme;
-  numberingResult: NumberingResult;
+  numberingResult: DerivedStateChunk['numberingResult'];
   constructionDirection: ConstructionDirection;
-  constructionSequence: ConstructionSequenceResult;
-  materialStats: MaterialStatsResult;
+  constructionSequence: DerivedStateChunk['constructionSequence'];
+  materialStats: DerivedStateChunk['materialStats'];
   showTileNumbers: boolean;
   highlightedStepNumber: number | null;
   highlightedMaterialGroupTileIds: string[];
@@ -65,57 +182,25 @@ interface RoofStore {
   printFilteredConstructionList: () => void;
 }
 
-const defaultRoof: RoofParams = {
-  shape: 'rectangle',
-  width: 600,
-  height: 400,
-  topWidth: 360,
-  curveDepth: 80,
-};
-
-const defaultTiles: TileParams = {
-  tileType: 'round',
-  width: 40,
-  length: 60,
-  overlapX: 10,
-  overlapY: 15,
-  minOverlapX: 5,
-  minOverlapY: 8,
-};
-
-const initialResult = calculateLayoutWithOriginal(defaultRoof, defaultTiles);
-const initialValidation = validateOverlapConstraints(initialResult.layout.tiles, defaultTiles);
-const initialNumbering = generateTileNumbering(initialResult.layout.tiles, 'slope-row-col');
-const initialSequence = generateConstructionSequence(initialResult.layout.tiles, 'bottom-up');
-const initialMaterialStats = calculateMaterialStats(initialResult.layout.tiles);
-
-const defaultListFilter: ConstructionListFilter = {
-  includeFullTiles: true,
-  includeCutTiles: true,
-  selectedGroups: [],
-  selectedSteps: [],
-  searchKeyword: '',
-};
-
 export const useRoofStore = create<RoofStore>((set, get) => ({
   roof: defaultRoof,
   tiles: defaultTiles,
-  layout: initialResult.layout,
+  layout: initialDerived.layout,
   manualAdjustments: {},
-  originalPositions: initialResult.originalPositions,
+  originalPositions: initialDerived.originalPositions,
   selectedTileId: null,
   selectedTileIds: [],
   selectionMode: 'single',
   wasteThreshold: 0.15,
-  showWasteWarning: false,
-  validationResult: initialValidation,
+  showWasteWarning: initialDerived.layout.wasteRate > 0.15,
+  validationResult: initialDerived.validationResult,
   lastValidationMessage: '',
   importValidationResult: null,
   numberingScheme: 'slope-row-col',
-  numberingResult: initialNumbering,
+  numberingResult: initialDerived.numberingResult,
   constructionDirection: 'bottom-up',
-  constructionSequence: initialSequence,
-  materialStats: initialMaterialStats,
+  constructionSequence: initialDerived.constructionSequence,
+  materialStats: initialDerived.materialStats,
   showTileNumbers: true,
   highlightedStepNumber: null,
   highlightedMaterialGroupTileIds: [],
@@ -126,23 +211,19 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
   setRoof: (roof) => {
     set((state) => {
       const newRoof = { ...state.roof, ...roof };
-      const result = calculateLayoutWithOriginal(newRoof, state.tiles, state.manualAdjustments);
-      const validation = validateOverlapConstraints(result.layout.tiles, state.tiles);
-      const numbering = generateTileNumbering(result.layout.tiles, state.numberingScheme);
-      const sequence = generateConstructionSequence(result.layout.tiles, state.constructionDirection);
-      const materialStats = calculateMaterialStats(result.layout.tiles);
+      const derived = deriveAllFromState(
+        newRoof,
+        state.tiles,
+        state.manualAdjustments,
+        state.numberingScheme,
+        state.constructionDirection
+      );
       return {
         roof: newRoof,
-        layout: result.layout,
-        originalPositions: result.originalPositions,
-        validationResult: validation,
-        showWasteWarning: result.layout.wasteRate > state.wasteThreshold,
-        lastValidationMessage: validation.isValid ? '' : `参数变更后检测到 ${validation.invalidTileIds.length} 块瓦片存在搭接约束违规`,
-        numberingResult: numbering,
-        constructionSequence: sequence,
-        materialStats,
-        highlightedStepNumber: null,
-        highlightedMaterialGroupTileIds: [],
+        ...derived,
+        ...HIGHLIGHT_RESET,
+        showWasteWarning: derived.layout.wasteRate > state.wasteThreshold,
+        lastValidationMessage: buildPostChangeValidationMessage(derived.validationResult),
       };
     });
   },
@@ -150,55 +231,50 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
   setTiles: (tiles) => {
     set((state) => {
       const newTiles = { ...state.tiles, ...tiles };
-      const result = calculateLayoutWithOriginal(state.roof, newTiles, state.manualAdjustments);
-      const validation = validateOverlapConstraints(result.layout.tiles, newTiles);
-      const numbering = generateTileNumbering(result.layout.tiles, state.numberingScheme);
-      const sequence = generateConstructionSequence(result.layout.tiles, state.constructionDirection);
-      const materialStats = calculateMaterialStats(result.layout.tiles);
+      const derived = deriveAllFromState(
+        state.roof,
+        newTiles,
+        state.manualAdjustments,
+        state.numberingScheme,
+        state.constructionDirection
+      );
       return {
         tiles: newTiles,
-        layout: result.layout,
-        originalPositions: result.originalPositions,
-        validationResult: validation,
-        showWasteWarning: result.layout.wasteRate > state.wasteThreshold,
-        lastValidationMessage: validation.isValid ? '' : `参数变更后检测到 ${validation.invalidTileIds.length} 块瓦片存在搭接约束违规`,
-        numberingResult: numbering,
-        constructionSequence: sequence,
-        materialStats,
-        highlightedStepNumber: null,
-        highlightedMaterialGroupTileIds: [],
+        ...derived,
+        ...HIGHLIGHT_RESET,
+        showWasteWarning: derived.layout.wasteRate > state.wasteThreshold,
+        lastValidationMessage: buildPostChangeValidationMessage(derived.validationResult),
       };
     });
   },
 
   setSelectedTile: (id) => {
-    set((state) => ({
+    set({
       selectedTileId: id,
       selectedTileIds: id ? [id] : [],
       highlightedMaterialGroupTileIds: [],
       highlightSource: id ? 'selection' : 'none',
-    }));
+    });
   },
 
   setSelectionMode: (mode) => {
     set((state) => ({
       selectionMode: mode,
-      selectedTileIds: mode === 'single' && state.selectedTileIds.length > 0
-        ? state.selectedTileId ? [state.selectedTileId] : []
-        : state.selectedTileIds,
+      selectedTileIds:
+        mode === 'single' && state.selectedTileIds.length > 0
+          ? state.selectedTileId
+            ? [state.selectedTileId]
+            : []
+          : state.selectedTileIds,
     }));
   },
 
   toggleTileSelection: (tileId) => {
     set((state) => {
-      const isSelected = state.selectedTileIds.includes(tileId);
-      const newIds = isSelected
-        ? state.selectedTileIds.filter(id => id !== tileId)
-        : [...state.selectedTileIds, tileId];
+      const change = buildToggleSelection(state.selectedTileIds, tileId);
       return {
-        selectedTileIds: newIds,
-        selectedTileId: newIds.length > 0 ? newIds[newIds.length - 1] : null,
-        highlightSource: newIds.length > 0 ? 'selection' : 'none',
+        ...change,
+        highlightedMaterialGroupTileIds: [],
       };
     });
   },
@@ -213,40 +289,20 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
 
   selectAllTiles: () => {
     const state = get();
-    const allIds = state.layout.tiles.map(t => t.id);
-    set({
-      selectedTileIds: allIds,
-      selectedTileId: allIds.length > 0 ? allIds[0] : null,
-      highlightSource: 'selection',
-    });
+    const allIds = state.layout.tiles.map((t) => t.id);
+    set(buildSelectionChange(allIds));
   },
 
   selectTilesInRect: (x1, y1, x2, y2) => {
     const state = get();
-    const minX = Math.min(x1, x2);
-    const maxX = Math.max(x1, x2);
-    const minY = Math.min(y1, y2);
-    const maxY = Math.max(y1, y2);
-
-    const tileIds = state.layout.tiles
-      .filter(tile => {
-        const tileCenterX = tile.x + tile.width / 2;
-        const tileCenterY = tile.y + tile.height / 2;
-        return tileCenterX >= minX && tileCenterX <= maxX && tileCenterY >= minY && tileCenterY <= maxY;
-      })
-      .map(tile => tile.id);
-
-    set({
-      selectedTileIds: tileIds,
-      selectedTileId: tileIds.length > 0 ? tileIds[0] : null,
-      highlightSource: tileIds.length > 0 ? 'selection' : 'none',
-    });
+    const tileIds = selectInRect(state.layout.tiles, x1, y1, x2, y2);
+    set(buildSelectionChange(tileIds));
   },
 
   setManualAdjustment: (tileId, x, y) => {
     const state = get();
-    const tile = state.layout.tiles.find(t => t.id === tileId);
-    
+    const tile = state.layout.tiles.find((t) => t.id === tileId);
+
     if (!tile) {
       return { success: false, message: '未找到瓦片' };
     }
@@ -255,11 +311,9 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
       const clampedX = Math.max(0, Math.min(x, state.roof.width - tile.width));
       const clampedY = Math.max(0, Math.min(y, state.roof.height - tile.height));
       const boundaryMsg = `瓦片不能移出屋面边界（X范围: 0~${(state.roof.width - tile.width).toFixed(0)}mm，Y范围: 0~${(state.roof.height - tile.height).toFixed(0)}mm）`;
-      
+
       if (x !== clampedX || y !== clampedY) {
-        set({
-          lastValidationMessage: `调整被拦截：${boundaryMsg}`,
-        });
+        set({ lastValidationMessage: `调整被拦截：${boundaryMsg}` });
         return { success: false, message: boundaryMsg };
       }
     }
@@ -267,13 +321,11 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
     const tileCenterX = x + tile.width / 2;
     const tileCenterY = y + tile.height / 2;
     if (!isPointInRoof(state.roof, tileCenterX, tileCenterY)) {
-      set({
-        lastValidationMessage: '调整被拦截：瓦片中心点必须在屋面区域内',
-      });
+      set({ lastValidationMessage: '调整被拦截：瓦片中心点必须在屋面区域内' });
       return { success: false, message: '瓦片中心点必须在屋面区域内' };
     }
-    
-    const validation = validateSingleTileAdjustment(
+
+    const validation: SingleTileAdjustmentValidation = validateSingleTileAdjustment(
       tileId,
       x,
       y,
@@ -282,9 +334,7 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
     );
 
     if (!validation.isValid) {
-      set({
-        lastValidationMessage: `调整被拦截：${validation.message}`,
-      });
+      set({ lastValidationMessage: `调整被拦截：${validation.message}` });
       return { success: false, message: validation.message };
     }
 
@@ -292,24 +342,20 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
       ...state.manualAdjustments,
       [tileId]: { x, y },
     };
-    const result = calculateLayoutWithOriginal(state.roof, state.tiles, newAdjustments);
-    const fullValidation = validateOverlapConstraints(result.layout.tiles, state.tiles);
-    const numbering = generateTileNumbering(result.layout.tiles, state.numberingScheme);
-    const sequence = generateConstructionSequence(result.layout.tiles, state.constructionDirection);
-    const materialStats = calculateMaterialStats(result.layout.tiles);
+    const derived = deriveAllFromState(
+      state.roof,
+      state.tiles,
+      newAdjustments,
+      state.numberingScheme,
+      state.constructionDirection
+    );
 
     set({
       manualAdjustments: newAdjustments,
-      layout: result.layout,
-      originalPositions: result.originalPositions,
-      validationResult: fullValidation,
-      showWasteWarning: result.layout.wasteRate > state.wasteThreshold,
+      ...derived,
+      ...HIGHLIGHT_RESET,
+      showWasteWarning: derived.layout.wasteRate > state.wasteThreshold,
       lastValidationMessage: '',
-      numberingResult: numbering,
-      constructionSequence: sequence,
-      materialStats,
-      highlightedStepNumber: null,
-      highlightedMaterialGroupTileIds: [],
     });
 
     return { success: true, message: '' };
@@ -321,23 +367,19 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
         ...state.manualAdjustments,
         [tileId]: { x, y },
       };
-      const result = calculateLayoutWithOriginal(state.roof, state.tiles, newAdjustments);
-      const validation = validateOverlapConstraints(result.layout.tiles, state.tiles);
-      const numbering = generateTileNumbering(result.layout.tiles, state.numberingScheme);
-      const sequence = generateConstructionSequence(result.layout.tiles, state.constructionDirection);
-      const materialStats = calculateMaterialStats(result.layout.tiles);
+      const derived = deriveAllFromState(
+        state.roof,
+        state.tiles,
+        newAdjustments,
+        state.numberingScheme,
+        state.constructionDirection
+      );
       return {
         manualAdjustments: newAdjustments,
-        layout: result.layout,
-        originalPositions: result.originalPositions,
-        validationResult: validation,
-        showWasteWarning: result.layout.wasteRate > state.wasteThreshold,
-        lastValidationMessage: validation.isValid ? '' : `检测到 ${validation.invalidTileIds.length} 块瓦片存在搭接约束违规`,
-        numberingResult: numbering,
-        constructionSequence: sequence,
-        materialStats,
-        highlightedStepNumber: null,
-        highlightedMaterialGroupTileIds: [],
+        ...derived,
+        ...HIGHLIGHT_RESET,
+        showWasteWarning: derived.layout.wasteRate > state.wasteThreshold,
+        lastValidationMessage: buildPostChangeValidationMessage(derived.validationResult),
       };
     });
   },
@@ -346,23 +388,19 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
     set((state) => {
       const newAdjustments = { ...state.manualAdjustments };
       delete newAdjustments[tileId];
-      const result = calculateLayoutWithOriginal(state.roof, state.tiles, newAdjustments);
-      const validation = validateOverlapConstraints(result.layout.tiles, state.tiles);
-      const numbering = generateTileNumbering(result.layout.tiles, state.numberingScheme);
-      const sequence = generateConstructionSequence(result.layout.tiles, state.constructionDirection);
-      const materialStats = calculateMaterialStats(result.layout.tiles);
+      const derived = deriveAllFromState(
+        state.roof,
+        state.tiles,
+        newAdjustments,
+        state.numberingScheme,
+        state.constructionDirection
+      );
       return {
         manualAdjustments: newAdjustments,
-        layout: result.layout,
-        originalPositions: result.originalPositions,
-        validationResult: validation,
-        showWasteWarning: result.layout.wasteRate > state.wasteThreshold,
-        lastValidationMessage: validation.isValid ? '' : `检测到 ${validation.invalidTileIds.length} 块瓦片存在搭接约束违规`,
-        numberingResult: numbering,
-        constructionSequence: sequence,
-        materialStats,
-        highlightedStepNumber: null,
-        highlightedMaterialGroupTileIds: [],
+        ...derived,
+        ...HIGHLIGHT_RESET,
+        showWasteWarning: derived.layout.wasteRate > state.wasteThreshold,
+        lastValidationMessage: buildPostChangeValidationMessage(derived.validationResult),
       };
     });
   },
@@ -370,57 +408,47 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
   resetTileToOriginal: (tileId) => {
     const state = get();
     const originalPos = state.originalPositions[tileId];
-    
+
     if (!originalPos) {
-      set({
-        lastValidationMessage: `未找到瓦片 ${tileId} 的原始位置`,
-      });
+      set({ lastValidationMessage: `未找到瓦片 ${tileId} 的原始位置` });
       return;
     }
 
     const newAdjustments = { ...state.manualAdjustments };
     delete newAdjustments[tileId];
-    
-    const result = calculateLayoutWithOriginal(state.roof, state.tiles, newAdjustments);
-    const validation = validateOverlapConstraints(result.layout.tiles, state.tiles);
-    const numbering = generateTileNumbering(result.layout.tiles, state.numberingScheme);
-    const sequence = generateConstructionSequence(result.layout.tiles, state.constructionDirection);
-    const materialStats = calculateMaterialStats(result.layout.tiles);
+
+    const derived = deriveAllFromState(
+      state.roof,
+      state.tiles,
+      newAdjustments,
+      state.numberingScheme,
+      state.constructionDirection
+    );
 
     set({
       manualAdjustments: newAdjustments,
-      layout: result.layout,
-      originalPositions: result.originalPositions,
-      validationResult: validation,
-      showWasteWarning: result.layout.wasteRate > state.wasteThreshold,
+      ...derived,
+      ...HIGHLIGHT_RESET,
+      showWasteWarning: derived.layout.wasteRate > state.wasteThreshold,
       lastValidationMessage: `瓦片 ${tileId} 已重置到原始位置`,
-      numberingResult: numbering,
-      constructionSequence: sequence,
-      materialStats,
-      highlightedStepNumber: null,
-      highlightedMaterialGroupTileIds: [],
     });
   },
 
   clearManualAdjustments: () => {
     set((state) => {
-      const result = calculateLayoutWithOriginal(state.roof, state.tiles, {});
-      const validation = validateOverlapConstraints(result.layout.tiles, state.tiles);
-      const numbering = generateTileNumbering(result.layout.tiles, state.numberingScheme);
-      const sequence = generateConstructionSequence(result.layout.tiles, state.constructionDirection);
-      const materialStats = calculateMaterialStats(result.layout.tiles);
+      const derived = deriveAllFromState(
+        state.roof,
+        state.tiles,
+        {},
+        state.numberingScheme,
+        state.constructionDirection
+      );
       return {
         manualAdjustments: {},
-        layout: result.layout,
-        originalPositions: result.originalPositions,
-        validationResult: validation,
-        showWasteWarning: result.layout.wasteRate > state.wasteThreshold,
-        lastValidationMessage: validation.isValid ? '' : `检测到 ${validation.invalidTileIds.length} 块瓦片存在搭接约束违规`,
-        numberingResult: numbering,
-        constructionSequence: sequence,
-        materialStats,
-        highlightedStepNumber: null,
-        highlightedMaterialGroupTileIds: [],
+        ...derived,
+        ...HIGHLIGHT_RESET,
+        showWasteWarning: derived.layout.wasteRate > state.wasteThreshold,
+        lastValidationMessage: buildPostChangeValidationMessage(derived.validationResult),
       };
     });
   },
@@ -434,22 +462,18 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
 
   recalculateLayout: () => {
     set((state) => {
-      const result = calculateLayoutWithOriginal(state.roof, state.tiles, state.manualAdjustments);
-      const validation = validateOverlapConstraints(result.layout.tiles, state.tiles);
-      const numbering = generateTileNumbering(result.layout.tiles, state.numberingScheme);
-      const sequence = generateConstructionSequence(result.layout.tiles, state.constructionDirection);
-      const materialStats = calculateMaterialStats(result.layout.tiles);
+      const derived = deriveAllFromState(
+        state.roof,
+        state.tiles,
+        state.manualAdjustments,
+        state.numberingScheme,
+        state.constructionDirection
+      );
       return {
-        layout: result.layout,
-        originalPositions: result.originalPositions,
-        validationResult: validation,
-        showWasteWarning: result.layout.wasteRate > state.wasteThreshold,
-        lastValidationMessage: validation.isValid ? '' : `检测到 ${validation.invalidTileIds.length} 块瓦片存在搭接约束违规`,
-        numberingResult: numbering,
-        constructionSequence: sequence,
-        materialStats,
-        highlightedStepNumber: null,
-        highlightedMaterialGroupTileIds: [],
+        ...derived,
+        ...HIGHLIGHT_RESET,
+        showWasteWarning: derived.layout.wasteRate > state.wasteThreshold,
+        lastValidationMessage: buildPostChangeValidationMessage(derived.validationResult),
       };
     });
   },
@@ -459,67 +483,63 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
       const validation = validateOverlapConstraints(state.layout.tiles, state.tiles);
       return {
         validationResult: validation,
-        lastValidationMessage: validation.isValid 
-          ? '所有瓦片排布符合约束要求' 
-          : `检测到 ${validation.invalidTileIds.length} 块瓦片存在搭接约束违规`,
+        lastValidationMessage: buildValidationMessage(validation),
       };
     });
   },
 
   exportProject: () => {
     const state = get();
-    return {
-      roof: state.roof,
-      tiles: state.tiles,
-      layout: state.layout,
-      manualAdjustments: state.manualAdjustments,
-      wasteThreshold: state.wasteThreshold,
-    };
+    return buildProjectExport(
+      state.roof,
+      state.tiles,
+      state.layout,
+      state.manualAdjustments,
+      state.wasteThreshold
+    );
   },
 
   importProject: (data) => {
-    const warnings: string[] = [];
-    
-    const result = calculateLayoutWithOriginal(data.roof, data.tiles, data.manualAdjustments);
-    const validation = validateOverlapConstraints(result.layout.tiles, data.tiles);
-    const numbering = generateTileNumbering(result.layout.tiles, 'slope-row-col');
-    const sequence = generateConstructionSequence(result.layout.tiles, 'bottom-up');
-    const materialStats = calculateMaterialStats(result.layout.tiles);
-
-    if (!validation.isValid) {
-      warnings.push(`导入方案检测到 ${validation.invalidTileIds.length} 块瓦片存在搭接约束违规`);
+    if (!validateProjectData(data)) {
+      return { success: false, warnings: ['文件格式错误'] };
     }
 
-    if (result.layout.wasteRate > data.wasteThreshold) {
-      warnings.push(`导入方案损耗率为 ${(result.layout.wasteRate * 100).toFixed(2)}%，超过阈值 ${(data.wasteThreshold * 100).toFixed(0)}%`);
-    }
+    const derived = deriveAllFromState(
+      data.roof,
+      data.tiles,
+      data.manualAdjustments,
+      'slope-row-col',
+      'bottom-up'
+    );
 
-    if (data.manualAdjustments && Object.keys(data.manualAdjustments).length > 0) {
-      warnings.push(`导入方案包含 ${Object.keys(data.manualAdjustments).length} 块手动调整的瓦片`);
-    }
+    const warnings = buildImportWarnings({
+      layoutWasteRate: derived.layout.wasteRate,
+      wasteThreshold: data.wasteThreshold,
+      invalidTileCount: derived.validationResult.invalidTileIds.length,
+      manualAdjustmentCount: Object.keys(data.manualAdjustments).length,
+    });
+
+    void validateProjectData;
 
     set({
       roof: data.roof,
       tiles: data.tiles,
-      layout: result.layout,
-      originalPositions: result.originalPositions,
+      layout: derived.layout,
+      originalPositions: derived.originalPositions,
       manualAdjustments: data.manualAdjustments,
       wasteThreshold: data.wasteThreshold,
-      showWasteWarning: result.layout.wasteRate > data.wasteThreshold,
-      validationResult: validation,
-      importValidationResult: validation,
-      lastValidationMessage: warnings.length > 0 ? warnings.join('；') : '方案导入成功，所有约束检查通过',
-      numberingResult: numbering,
-      constructionSequence: sequence,
-      materialStats,
-      highlightedStepNumber: null,
-      highlightedMaterialGroupTileIds: [],
+      showWasteWarning: derived.layout.wasteRate > data.wasteThreshold,
+      validationResult: derived.validationResult,
+      importValidationResult: derived.validationResult,
+      lastValidationMessage:
+        warnings.length > 0 ? warnings.join('；') : '方案导入成功，所有约束检查通过',
+      numberingResult: derived.numberingResult,
+      constructionSequence: derived.constructionSequence,
+      materialStats: derived.materialStats,
+      ...HIGHLIGHT_RESET,
     });
 
-    return { 
-      success: true, 
-      warnings 
-    };
+    return { success: true, warnings };
   },
 
   clearImportValidation: () => {
@@ -527,24 +547,18 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
   },
 
   setNumberingScheme: (scheme) => {
-    set((state) => {
-      const numbering = generateTileNumbering(state.layout.tiles, scheme);
-      return {
-        numberingScheme: scheme,
-        numberingResult: numbering,
-      };
-    });
+    set((state) => ({
+      numberingScheme: scheme,
+      numberingResult: generateTileNumbering(state.layout.tiles, scheme),
+    }));
   },
 
   setConstructionDirection: (direction) => {
-    set((state) => {
-      const sequence = generateConstructionSequence(state.layout.tiles, direction);
-      return {
-        constructionDirection: direction,
-        constructionSequence: sequence,
-        highlightedStepNumber: null,
-      };
-    });
+    set((state) => ({
+      constructionDirection: direction,
+      constructionSequence: generateConstructionSequence(state.layout.tiles, direction),
+      highlightedStepNumber: null,
+    }));
   },
 
   toggleShowTileNumbers: () => {
@@ -556,25 +570,15 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
   },
 
   setHighlightedStepNumber: (step) => {
-    set({
-      highlightedStepNumber: step,
-      highlightSource: step !== null ? 'step' : 'none',
-      focusedTileId: null,
-    });
+    set(buildStepHighlightChange(step));
   },
 
   setHighlightedMaterialGroupTileIds: (tileIds) => {
-    set({
-      highlightedMaterialGroupTileIds: tileIds,
-      highlightSource: tileIds.length > 0 ? 'material' : 'none',
-    });
+    set(buildMaterialHighlightChange(tileIds));
   },
 
   clearHighlightedMaterialGroup: () => {
-    set({
-      highlightedMaterialGroupTileIds: [],
-      highlightSource: 'none',
-    });
+    set(buildMaterialHighlightChange([]));
   },
 
   setFocusedTile: (tileId) => {
@@ -601,87 +605,57 @@ export const useRoofStore = create<RoofStore>((set, get) => ({
   },
 
   regenerateDerivedData: () => {
-    set((state) => {
-      const numbering = generateTileNumbering(state.layout.tiles, state.numberingScheme);
-      const sequence = generateConstructionSequence(state.layout.tiles, state.constructionDirection);
-      const materialStats = calculateMaterialStats(state.layout.tiles);
-      return {
-        numberingResult: numbering,
-        constructionSequence: sequence,
-        materialStats,
-      };
-    });
+    set((state) => ({
+      numberingResult: generateTileNumbering(state.layout.tiles, state.numberingScheme),
+      constructionSequence: generateConstructionSequence(state.layout.tiles, state.constructionDirection),
+      materialStats: calculateMaterialStats(state.layout.tiles),
+    }));
   },
 
   exportConstructionListJSON: () => {
     const state = get();
-    return generateConstructionListExportData(
-      state.roof,
-      state.tiles,
-      state.layout.tiles,
-      state.numberingScheme,
-      state.constructionDirection
-    );
+    return getExportData({
+      roof: state.roof,
+      tiles: state.tiles,
+      layoutTiles: state.layout.tiles,
+      numberingScheme: state.numberingScheme,
+      constructionDirection: state.constructionDirection,
+    });
   },
 
   exportConstructionListHTML: () => {
     const state = get();
-    const data = generateConstructionListExportData(
-      state.roof,
-      state.tiles,
-      state.layout.tiles,
-      state.numberingScheme,
-      state.constructionDirection
-    );
-    const html = generatePrintableConstructionListHTML(data);
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `施工清单_${new Date().toISOString().slice(0, 10)}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    buildAndExportConstructionListHTML({
+      roof: state.roof,
+      tiles: state.tiles,
+      layoutTiles: state.layout.tiles,
+      numberingScheme: state.numberingScheme,
+      constructionDirection: state.constructionDirection,
+    });
   },
 
   printConstructionList: () => {
     const state = get();
-    const data = generateConstructionListExportData(
-      state.roof,
-      state.tiles,
-      state.layout.tiles,
-      state.numberingScheme,
-      state.constructionDirection
-    );
-    const html = generatePrintableConstructionListHTML(data);
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-      printWindow.onload = () => {
-        printWindow.print();
-      };
-    }
+    buildAndPrintConstructionList({
+      roof: state.roof,
+      tiles: state.tiles,
+      layoutTiles: state.layout.tiles,
+      numberingScheme: state.numberingScheme,
+      constructionDirection: state.constructionDirection,
+    });
   },
 
   printFilteredConstructionList: () => {
     const state = get();
-    const data = generateConstructionListExportData(
-      state.roof,
-      state.tiles,
-      state.layout.tiles,
-      state.numberingScheme,
-      state.constructionDirection
-    );
-    const html = generateFilteredPrintableConstructionListHTML(data, state.listFilter);
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-      printWindow.onload = () => {
-        printWindow.print();
-      };
-    }
+    buildAndPrintFilteredConstructionList({
+      roof: state.roof,
+      tiles: state.tiles,
+      layoutTiles: state.layout.tiles,
+      numberingScheme: state.numberingScheme,
+      constructionDirection: state.constructionDirection,
+      filter: state.listFilter,
+    });
   },
 }));
+
+export type { LayoutManualAdjustments, OriginalPositionMap };

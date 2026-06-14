@@ -1,37 +1,57 @@
-import { Card, Group, Stack, Text, Badge, Select, ActionIcon, Tooltip, ScrollArea, Checkbox, Divider, Box } from '@mantine/core';
+import {
+  Card,
+  Group,
+  Stack,
+  Text,
+  Badge,
+  Select,
+  ActionIcon,
+  Tooltip,
+  ScrollArea,
+  Checkbox,
+  Divider,
+  Box,
+} from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { IconListCheck, IconArrowUp, IconArrowDown, IconArrowLeft, IconArrowRight, IconFocus, IconFocusCentered, IconEye, IconEyeOff, IconChevronDown, IconChevronUp } from '@tabler/icons-react';
+import {
+  IconListCheck,
+  IconArrowUp,
+  IconArrowDown,
+  IconArrowLeft,
+  IconArrowRight,
+  IconFocus,
+  IconEyeOff,
+  IconChevronDown,
+  IconChevronUp,
+} from '@tabler/icons-react';
 import type { ConstructionDirection } from '@/types';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
+import { DIRECTION_OPTIONS } from '@/domains/checklist';
 
 export default function ConstructionSequencePanel() {
-  const {
-    constructionSequence,
-    constructionDirection,
-    setConstructionDirection,
-    highlightedStepNumber,
-    setHighlightedStepNumber,
-    numberingResult,
-    listFilter,
-    setListFilter,
-  } = useRoofStore();
+  const constructionSequence = useRoofStore((s) => s.constructionSequence);
+  const constructionDirection = useRoofStore((s) => s.constructionDirection);
+  const setConstructionDirection = useRoofStore((s) => s.setConstructionDirection);
+  const highlightedStepNumber = useRoofStore((s) => s.highlightedStepNumber);
+  const setHighlightedStepNumber = useRoofStore((s) => s.setHighlightedStepNumber);
+  const numberingResult = useRoofStore((s) => s.numberingResult);
+  const listFilter = useRoofStore((s) => s.listFilter);
+  const setListFilter = useRoofStore((s) => s.setListFilter);
 
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
 
-  const directionOptions = [
-    { value: 'bottom-up', label: '从下往上' },
-    { value: 'top-down', label: '从上往下' },
-    { value: 'left-right', label: '从左往右' },
-    { value: 'right-left', label: '从右往左' },
-  ];
-
   const getDirectionIcon = (dir: ConstructionDirection) => {
     switch (dir) {
-      case 'bottom-up': return <IconArrowUp size={16} />;
-      case 'top-down': return <IconArrowDown size={16} />;
-      case 'left-right': return <IconArrowRight size={16} />;
-      case 'right-left': return <IconArrowLeft size={16} />;
-      default: return <IconArrowUp size={16} />;
+      case 'bottom-up':
+        return <IconArrowUp size={16} />;
+      case 'top-down':
+        return <IconArrowDown size={16} />;
+      case 'left-right':
+        return <IconArrowRight size={16} />;
+      case 'right-left':
+        return <IconArrowLeft size={16} />;
+      default:
+        return <IconArrowUp size={16} />;
     }
   };
 
@@ -55,13 +75,13 @@ export default function ConstructionSequencePanel() {
     e.stopPropagation();
     const isSelected = listFilter.selectedSteps.includes(stepNumber);
     const newSteps = isSelected
-      ? listFilter.selectedSteps.filter(s => s !== stepNumber)
+      ? listFilter.selectedSteps.filter((s) => s !== stepNumber)
       : [...listFilter.selectedSteps, stepNumber];
     setListFilter({ selectedSteps: newSteps });
   };
 
   const selectAllSteps = () => {
-    const allSteps = constructionSequence.steps.map(s => s.stepNumber);
+    const allSteps = constructionSequence.steps.map((s) => s.stepNumber);
     setListFilter({ selectedSteps: allSteps });
   };
 
@@ -69,9 +89,7 @@ export default function ConstructionSequencePanel() {
     setListFilter({ selectedSteps: [] });
   };
 
-  const allStepsSelected = useMemo(() => {
-    return listFilter.selectedSteps.length === constructionSequence.totalSteps;
-  }, [listFilter.selectedSteps.length, constructionSequence.totalSteps]);
+  const allStepsSelected = listFilter.selectedSteps.length === constructionSequence.totalSteps;
 
   return (
     <Card withBorder shadow="sm" radius="md">
@@ -98,7 +116,7 @@ export default function ConstructionSequencePanel() {
                 w={130}
                 value={constructionDirection}
                 onChange={(v) => v && setConstructionDirection(v as ConstructionDirection)}
-                data={directionOptions}
+                data={DIRECTION_OPTIONS}
                 allowDeselect={false}
               />
             </Group>
@@ -111,7 +129,7 @@ export default function ConstructionSequencePanel() {
               <Checkbox
                 size="xs"
                 checked={allStepsSelected}
-                onChange={() => allStepsSelected ? clearStepFilter() : selectAllSteps()}
+                onChange={() => (allStepsSelected ? clearStepFilter() : selectAllSteps())}
                 label={
                   <Text size="xs" fw={500}>
                     筛选施工步骤
@@ -144,7 +162,9 @@ export default function ConstructionSequencePanel() {
               const isExpanded = expandedStep === step.stepNumber;
               const isFiltered = isStepInFilter(step.stepNumber);
               const sampleTileId = step.tileIds[0];
-              const sampleNumbering = sampleTileId ? numberingResult.numberingMap[sampleTileId] : null;
+              const sampleNumbering = sampleTileId
+                ? numberingResult.numberingMap[sampleTileId]
+                : null;
               const lastTileId = step.tileIds[step.tileIds.length - 1];
               const lastNumbering = lastTileId ? numberingResult.numberingMap[lastTileId] : null;
 
@@ -154,13 +174,21 @@ export default function ConstructionSequencePanel() {
                     style={{
                       padding: '10px 12px',
                       borderRadius: 8,
-                      border: `1px solid ${isHighlighted ? '#10b981' : isFiltered ? '#3b82f6' : '#e5e7eb'}`,
-                      background: isHighlighted ? '#ecfdf5' : isFiltered ? '#eff6ff' : '#fafafa',
+                      border: `1px solid ${
+                        isHighlighted ? '#10b981' : isFiltered ? '#3b82f6' : '#e5e7eb'
+                      }`,
+                      background: isHighlighted
+                        ? '#ecfdf5'
+                        : isFiltered
+                        ? '#eff6ff'
+                        : '#fafafa',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
                     }}
                     onMouseEnter={() => handleStepHover(step.stepNumber)}
-                    onMouseLeave={() => highlightedStepNumber === step.stepNumber && handleStepHover(null)}
+                    onMouseLeave={() =>
+                      highlightedStepNumber === step.stepNumber && handleStepHover(null)
+                    }
                     onClick={() => handleStepClick(step.stepNumber)}
                     justify="space-between"
                   >
@@ -168,7 +196,9 @@ export default function ConstructionSequencePanel() {
                       <Checkbox
                         size="sm"
                         checked={isFiltered}
-                        onClick={(e) => toggleStepFilter(step.stepNumber, e as unknown as React.MouseEvent)}
+                        onClick={(e) =>
+                          toggleStepFilter(step.stepNumber, e as unknown as React.MouseEvent)
+                        }
                         readOnly
                       />
                       <Badge
@@ -185,7 +215,8 @@ export default function ConstructionSequencePanel() {
                         </Text>
                         {sampleNumbering && step.tileIds.length > 1 && (
                           <Text size="xs" c="dimmed">
-                            {sampleNumbering.displayNumber} → {lastNumbering?.displayNumber || ''}
+                            {sampleNumbering.displayNumber} →{' '}
+                            {lastNumbering?.displayNumber || ''}
                           </Text>
                         )}
                       </Stack>
@@ -196,7 +227,11 @@ export default function ConstructionSequencePanel() {
                           {step.tileIds.length} 块
                         </Badge>
                         <ActionIcon size="xs" variant="subtle" color="gray">
-                          {isExpanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+                          {isExpanded ? (
+                            <IconChevronUp size={14} />
+                          ) : (
+                            <IconChevronDown size={14} />
+                          )}
                         </ActionIcon>
                       </Group>
                       <Text size="xs" c="dimmed">

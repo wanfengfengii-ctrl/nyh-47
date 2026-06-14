@@ -1,57 +1,49 @@
-import { Card, Group, Stack, Text, Badge, Select, Divider, Box, ScrollArea, TextInput, ActionIcon, Tooltip } from '@mantine/core';
+import {
+  Card,
+  Group,
+  Stack,
+  Text,
+  Badge,
+  Select,
+  Divider,
+  Box,
+  ScrollArea,
+  TextInput,
+  Tooltip,
+} from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { IconHash, IconListNumbers, IconArrowRight, IconArrowLeft, IconSearch, IconFocus, IconCheck } from '@tabler/icons-react';
+import {
+  IconHash,
+  IconListNumbers,
+  IconArrowRight,
+  IconArrowLeft,
+  IconSearch,
+  IconFocus,
+  IconCheck,
+} from '@tabler/icons-react';
 import type { NumberingScheme } from '@/types';
 import { useMemo, useState } from 'react';
+import { NUMBERING_SCHEME_OPTIONS, searchNumbering, getSampleRows } from '@/domains/numbering';
 
 export default function TileNumberingPanel() {
-  const {
-    numberingScheme,
-    setNumberingScheme,
-    numberingResult,
-    layout,
-    showTileNumbers,
-    setShowTileNumbers,
-    focusAndHighlightTile,
-    focusedTileId,
-    setSelectedTile,
-  } = useRoofStore();
+  const numberingScheme = useRoofStore((s) => s.numberingScheme);
+  const setNumberingScheme = useRoofStore((s) => s.setNumberingScheme);
+  const numberingResult = useRoofStore((s) => s.numberingResult);
+  const layout = useRoofStore((s) => s.layout);
+  const showTileNumbers = useRoofStore((s) => s.showTileNumbers);
+  const setShowTileNumbers = useRoofStore((s) => s.setShowTileNumbers);
+  const focusAndHighlightTile = useRoofStore((s) => s.focusAndHighlightTile);
+  const focusedTileId = useRoofStore((s) => s.focusedTileId);
 
   const [searchKeyword, setSearchKeyword] = useState('');
 
-  const schemeOptions = [
-    { value: 'slope-row-col', label: '坡面-行-列' },
-    { value: 'row-col', label: '行-列' },
-    { value: 'snake-row', label: '蛇形行列' },
-  ];
-
   const sampleRows = useMemo(() => {
-    const rows = new Map<number, typeof layout.tiles>();
-    layout.tiles.forEach(tile => {
-      if (!rows.has(tile.row)) {
-        rows.set(tile.row, []);
-      }
-      rows.get(tile.row)!.push(tile);
-    });
-    const sortedRowKeys = Array.from(rows.keys()).sort((a, b) => a - b);
-    return sortedRowKeys.slice(0, 4).map(rowNum => {
-      const rowTiles = rows.get(rowNum)!.sort((a, b) => a.col - b.col);
-      return { rowNum, tiles: rowTiles };
-    });
+    return getSampleRows(layout.tiles);
   }, [layout.tiles]);
 
   const filteredNumbering = useMemo(() => {
-    if (!searchKeyword.trim()) return [];
-    const kw = searchKeyword.toLowerCase();
-    return Object.values(numberingResult.numberingMap)
-      .filter(n =>
-        n.displayNumber.toLowerCase().includes(kw) ||
-        String(n.rowNumber).includes(kw) ||
-        String(n.colNumber).includes(kw) ||
-        n.tileId.toLowerCase().includes(kw)
-      )
-      .slice(0, 10);
-  }, [numberingResult.numberingMap, searchKeyword]);
+    return searchNumbering(numberingResult, searchKeyword, 10);
+  }, [numberingResult, searchKeyword]);
 
   const handleTileClick = (tileId: string) => {
     focusAndHighlightTile(tileId);
@@ -68,12 +60,14 @@ export default function TileNumberingPanel() {
         </Group>
         <Divider />
 
-        <Box style={{
-          background: '#f8fafc',
-          borderRadius: 8,
-          padding: 12,
-          border: '1px solid #e2e8f0',
-        }}>
+        <Box
+          style={{
+            background: '#f8fafc',
+            borderRadius: 8,
+            padding: 12,
+            border: '1px solid #e2e8f0',
+          }}
+        >
           {sampleRows.map(({ rowNum, tiles }) => {
             const isEvenRow = rowNum % 2 === 1;
             const isSnake = numberingScheme === 'snake-row';
@@ -94,7 +88,11 @@ export default function TileNumberingPanel() {
                       ) : (
                         <IconArrowLeft size={12} color="#f59e0b" />
                       )}
-                      <Text size="10px" c={direction === 'left-to-right' ? 'green' : 'orange'} fw={500}>
+                      <Text
+                        size="10px"
+                        c={direction === 'left-to-right' ? 'green' : 'orange'}
+                        fw={500}
+                      >
                         {direction === 'left-to-right' ? '左→右' : '右→左'}
                       </Text>
                     </Group>
@@ -139,7 +137,13 @@ export default function TileNumberingPanel() {
                 </Group>
 
                 {isSnake && rowNum < sampleRows.length - 1 && (
-                  <Box style={{ display: 'flex', justifyContent: isEvenRow ? 'flex-start' : 'flex-end', margin: '2px 8px' }}>
+                  <Box
+                    style={{
+                      display: 'flex',
+                      justifyContent: isEvenRow ? 'flex-start' : 'flex-end',
+                      margin: '2px 8px',
+                    }}
+                  >
                     <Text size="10px" c="dimmed">↕</Text>
                   </Box>
                 )}
@@ -178,7 +182,7 @@ export default function TileNumberingPanel() {
                 size="sm"
                 value={numberingScheme}
                 onChange={(v) => v && setNumberingScheme(v as NumberingScheme)}
-                data={schemeOptions}
+                data={NUMBERING_SCHEME_OPTIONS}
                 allowDeselect={false}
               />
             </div>
@@ -216,12 +220,16 @@ export default function TileNumberingPanel() {
                       background: focusedTileId === num.tileId ? '#dbeafe' : '#f1f5f9',
                       borderRadius: 6,
                       cursor: 'pointer',
-                      border: `1px solid ${focusedTileId === num.tileId ? '#3b82f6' : '#e2e8f0'}`,
+                      border: `1px solid ${
+                        focusedTileId === num.tileId ? '#3b82f6' : '#e2e8f0'
+                      }`,
                     }}
                     onClick={() => handleTileClick(num.tileId)}
                   >
                     <Group gap="xs">
-                      {focusedTileId === num.tileId && <IconCheck size={12} color="#3b82f6" />}
+                      {focusedTileId === num.tileId && (
+                        <IconCheck size={12} color="#3b82f6" />
+                      )}
                       <Text size="xs" fw={600} c="blue">
                         {num.displayNumber}
                       </Text>
@@ -282,7 +290,11 @@ export default function TileNumberingPanel() {
                         onClick={() => handleTileClick(tile.id)}
                       >
                         <Group gap="xs">
-                          <Badge size="sm" variant="light" color={tile.isCut ? 'orange' : 'green'}>
+                          <Badge
+                            size="sm"
+                            variant="light"
+                            color={tile.isCut ? 'orange' : 'green'}
+                          >
                             {tile.isCut ? '裁切' : '完整'}
                           </Badge>
                           <Text size="xs" c="dimmed">

@@ -1,11 +1,36 @@
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Stage, Layer, Rect, Line, Text as KonvaText } from 'react-konva';
-import { Card, Group as MantineGroup, Text, ActionIcon, Tooltip, Alert, Switch, SegmentedControl, Badge } from '@mantine/core';
+import {
+  Card,
+  Group as MantineGroup,
+  Text,
+  ActionIcon,
+  Tooltip,
+  Alert,
+  Switch,
+  SegmentedControl,
+  Badge,
+} from '@mantine/core';
 import { useRoofStore } from '@/store/roofStore';
-import { getRoofBoundaryPoints, isPointInRoof, validateSingleTileAdjustment } from '@/utils/roofCalculator';
+import {
+  getRoofBoundaryPoints,
+  isPointInRoof,
+  validateSingleTileAdjustment,
+} from '@/domains/layout';
 import type { Tile, SelectionMode } from '@/types';
-import { IconZoomIn, IconZoomOut, IconZoomCancel, IconAlertTriangle, IconListNumbers, IconEye, IconEyeOff, IconMouse, IconSelectAll, IconSelect, IconFocusCentered } from '@tabler/icons-react';
+import {
+  IconZoomIn,
+  IconZoomOut,
+  IconZoomCancel,
+  IconAlertTriangle,
+  IconListNumbers,
+  IconEye,
+  IconEyeOff,
+  IconSelectAll,
+  IconFocusCentered,
+} from '@tabler/icons-react';
 import Konva from 'konva';
+import { useHighlight } from '@/hooks/useHighlight';
 
 const STAGE_PADDING = 40;
 const SCALE_STEP = 0.1;
@@ -13,31 +38,26 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 5;
 
 export default function RoofCanvas() {
-  const {
-    roof,
-    layout,
-    selectedTileId,
-    selectedTileIds,
-    selectionMode,
-    setSelectionMode,
-    setSelectedTile,
-    toggleTileSelection,
-    clearTileSelection,
-    selectTilesInRect,
-    setManualAdjustment,
-    tiles,
-    validationResult,
-    lastValidationMessage,
-    showTileNumbers,
-    toggleShowTileNumbers,
-    numberingResult,
-    highlightedStepNumber,
-    constructionSequence,
-    highlightedMaterialGroupTileIds,
-    highlightSource,
-    focusedTileId,
-    setFocusedTile,
-  } = useRoofStore();
+  const roof = useRoofStore((s) => s.roof);
+  const layout = useRoofStore((s) => s.layout);
+  const tiles = useRoofStore((s) => s.tiles);
+  const selectionMode = useRoofStore((s) => s.selectionMode);
+  const setSelectionMode = useRoofStore((s) => s.setSelectionMode);
+  const setSelectedTile = useRoofStore((s) => s.setSelectedTile);
+  const toggleTileSelection = useRoofStore((s) => s.toggleTileSelection);
+  const clearTileSelection = useRoofStore((s) => s.clearTileSelection);
+  const selectTilesInRect = useRoofStore((s) => s.selectTilesInRect);
+  const setManualAdjustment = useRoofStore((s) => s.setManualAdjustment);
+  const validationResult = useRoofStore((s) => s.validationResult);
+  const lastValidationMessage = useRoofStore((s) => s.lastValidationMessage);
+  const showTileNumbers = useRoofStore((s) => s.showTileNumbers);
+  const toggleShowTileNumbers = useRoofStore((s) => s.toggleShowTileNumbers);
+  const numberingResult = useRoofStore((s) => s.numberingResult);
+  const focusedTileId = useRoofStore((s) => s.focusedTileId);
+  const setFocusedTile = useRoofStore((s) => s.setFocusedTile);
+  const selectedTileId = useRoofStore((s) => s.selectedTileId);
+
+  const highlight = useHighlight();
 
   const stageRef = useRef<Konva.Stage>(null);
   const [scale, setScale] = useState(1);
@@ -52,28 +72,21 @@ export default function RoofCanvas() {
   const boundaryPoints = getRoofBoundaryPoints(roof);
   const boundaryFlatPoints = boundaryPoints.flatMap((p) => [p.x, p.y]);
 
-  const highlightedTileIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (highlightedStepNumber !== null) {
-      const step = constructionSequence.steps.find(s => s.stepNumber === highlightedStepNumber);
-      if (step) step.tileIds.forEach(id => ids.add(id));
-    }
-    highlightedMaterialGroupTileIds.forEach(id => ids.add(id));
-    if (selectionMode !== 'single' && selectedTileIds.length > 0) {
-      selectedTileIds.forEach(id => ids.add(id));
-    }
-    return ids;
-  }, [highlightedStepNumber, constructionSequence.steps, highlightedMaterialGroupTileIds, selectedTileIds, selectionMode]);
-
   const cutTypeLabel = (tile: Tile): string => {
     if (!tile.isCut) return '';
     switch (tile.cutType) {
-      case 'left': return '◀';
-      case 'right': return '▶';
-      case 'top': return '▲';
-      case 'bottom': return '▼';
-      case 'both': return '◀▶';
-      default: return '✂';
+      case 'left':
+        return '◀';
+      case 'right':
+        return '▶';
+      case 'top':
+        return '▲';
+      case 'bottom':
+        return '▼';
+      case 'both':
+        return '◀▶';
+      default:
+        return '✂';
     }
   };
 
@@ -128,7 +141,7 @@ export default function RoofCanvas() {
   }, [fitToScreen]);
 
   const handleTileClick = useCallback(
-    (tile: Tile, e: Konva.KonvaEventObject<MouseEvent>) => {
+    (tile: Tile, _e: Konva.KonvaEventObject<MouseEvent>) => {
       if (selectionMode === 'single') {
         setSelectedTile(tile.id);
         setFocusedTile(tile.id);
@@ -259,58 +272,6 @@ export default function RoofCanvas() {
     [isBoxSelecting, boxStart, offset, scale, selectTilesInRect]
   );
 
-  const getHighlightColor = () => {
-    switch (highlightSource) {
-      case 'step': return { fill: '#10b981', stroke: '#059669', shadow: 'rgba(16,185,129,0.5)' };
-      case 'material': return { fill: '#f59e0b', stroke: '#d97706', shadow: 'rgba(245,158,11,0.5)' };
-      case 'selection': return { fill: '#3b82f6', stroke: '#1d4ed8', shadow: 'rgba(59,130,246,0.5)' };
-      case 'numbering': return { fill: '#8b5cf6', stroke: '#7c3aed', shadow: 'rgba(139,92,246,0.5)' };
-      default: return { fill: '#10b981', stroke: '#059669', shadow: 'rgba(16,185,129,0.5)' };
-    }
-  };
-
-  const getTileFill = (tile: Tile) => {
-    const colors = getHighlightColor();
-    if (validationResult.invalidTileIds.includes(tile.id)) return '#ef4444';
-    if (tile.id === selectedTileId && selectionMode === 'single') return '#3b82f6';
-    if (highlightedTileIds.has(tile.id)) return colors.fill;
-    if (tile.manuallyAdjusted) return '#8b5cf6';
-    if (tile.isCut) return '#f59e0b';
-    return tiles.tileType === 'round' ? '#8b4513' : '#a0522d';
-  };
-
-  const getTileStroke = (tile: Tile) => {
-    const colors = getHighlightColor();
-    if (validationResult.invalidTileIds.includes(tile.id)) return '#b91c1c';
-    if (tile.id === selectedTileId && selectionMode === 'single') return '#1d4ed8';
-    if (highlightedTileIds.has(tile.id)) return colors.stroke;
-    if (tile.manuallyAdjusted) return '#7c3aed';
-    if (tile.isCut) return '#d97706';
-    return '#5c2e0e';
-  };
-
-  const getTileStrokeWidth = (tile: Tile) => {
-    if (validationResult.invalidTileIds.includes(tile.id)) return 3;
-    if (tile.id === selectedTileId && selectionMode === 'single') return 2;
-    if (tile.id === focusedTileId) return 3;
-    if (highlightedTileIds.has(tile.id)) return 2;
-    if (tile.isCut) return 2;
-    return 1;
-  };
-
-  const getTileShadowColor = (tile: Tile) => {
-    const colors = getHighlightColor();
-    if (validationResult.invalidTileIds.includes(tile.id)) return 'rgba(239,68,68,0.5)';
-    if (tile.id === focusedTileId) return colors.shadow;
-    if (highlightedTileIds.has(tile.id)) return colors.shadow;
-    return 'rgba(0,0,0,0.1)';
-  };
-
-  const isSelected = (tileId: string) => {
-    if (selectionMode === 'single') return tileId === selectedTileId;
-    return selectedTileIds.includes(tileId);
-  };
-
   const selectionModeOptions = [
     { value: 'single', label: '单选' },
     { value: 'multi', label: '多选' },
@@ -322,21 +283,20 @@ export default function RoofCanvas() {
   const boxWidth = Math.abs(boxEnd.x - boxStart.x);
   const boxHeight = Math.abs(boxEnd.y - boxStart.y);
 
-  const getHighlightLabel = () => {
-    switch (highlightSource) {
-      case 'step': return { text: '施工步骤高亮', color: 'teal' as const };
-      case 'material': return { text: '材料分组高亮', color: 'orange' as const };
-      case 'selection': return { text: `已选 ${selectedTileIds.length} 块`, color: 'blue' as const };
-      case 'numbering': return { text: '编号定位高亮', color: 'violet' as const };
-      default: return null;
-    }
-  };
-
-  const highlightLabel = getHighlightLabel();
+  const selectedTile = layout.tiles.find((t) => t.id === selectedTileId);
 
   return (
-    <Card withBorder shadow="sm" radius="md" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Card.Section withBorder p="xs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Card
+      withBorder
+      shadow="sm"
+      radius="md"
+      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+    >
+      <Card.Section
+        withBorder
+        p="xs"
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+      >
         <MantineGroup gap="xs">
           <Tooltip label="放大">
             <ActionIcon variant="light" onClick={() => handleZoom(SCALE_STEP)}>
@@ -360,7 +320,15 @@ export default function RoofCanvas() {
 
         <MantineGroup gap="md">
           <MantineGroup gap="xs">
-            <Tooltip label={selectionMode === 'single' ? '单选模式' : selectionMode === 'multi' ? '多选模式' : '框选模式'}>
+            <Tooltip
+              label={
+                selectionMode === 'single'
+                  ? '单选模式'
+                  : selectionMode === 'multi'
+                  ? '多选模式'
+                  : '框选模式'
+              }
+            >
               <SegmentedControl
                 size="xs"
                 value={selectionMode}
@@ -368,9 +336,14 @@ export default function RoofCanvas() {
                 data={selectionModeOptions}
               />
             </Tooltip>
-            {selectionMode === 'multi' && selectedTileIds.length > 0 && (
+            {selectionMode === 'multi' && highlight.selectionContext.selectedCount > 0 && (
               <Tooltip label="清除选择">
-                <ActionIcon size="xs" variant="light" color="gray" onClick={clearTileSelection}>
+                <ActionIcon
+                  size="xs"
+                  variant="light"
+                  color="gray"
+                  onClick={clearTileSelection}
+                >
                   <IconFocusCentered size={14} />
                 </ActionIcon>
               </Tooltip>
@@ -394,21 +367,30 @@ export default function RoofCanvas() {
                 </ActionIcon>
               }
             />
-            <Text size="xs" c="dimmed">编号</Text>
+            <Text size="xs" c="dimmed">
+              编号
+            </Text>
           </MantineGroup>
         </MantineGroup>
       </Card.Section>
 
-      {highlightLabel && (
-        <Card.Section p="xs" withBorder style={{ background: 'rgba(236, 253, 245, 0.5)' }}>
+      {highlight.label && (
+        <Card.Section
+          p="xs"
+          withBorder
+          style={{ background: 'rgba(236, 253, 245, 0.5)' }}
+        >
           <MantineGroup justify="space-between">
-            <Badge size="sm" variant="light" color={highlightLabel.color}>
-              {highlightLabel.text}
+            <Badge size="sm" variant="light" color={highlight.label.color}>
+              {highlight.label.text}
             </Badge>
             <Text size="xs" c="dimmed">
-              {highlightSource === 'step' && `第 ${highlightedStepNumber} 步 / 共 ${constructionSequence.totalSteps} 步`}
-              {highlightSource === 'material' && `共 ${highlightedMaterialGroupTileIds.length} 块瓦片`}
-              {highlightSource === 'selection' && `共 ${layout.tiles.length} 块瓦片`}
+              {highlight.highlightSource === 'step' &&
+                `第 ${highlight.stepContext.highlightedStepNumber} 步 / 共 ${highlight.stepContext.totalSteps} 步`}
+              {highlight.highlightSource === 'material' &&
+                `共 ${highlight.materialContext.highlightedGroupTileIds.length} 块瓦片`}
+              {highlight.highlightSource === 'selection' &&
+                `共 ${highlight.selectionContext.totalCount} 块瓦片`}
             </Text>
           </MantineGroup>
         </Card.Section>
@@ -423,7 +405,8 @@ export default function RoofCanvas() {
             variant="light"
           >
             <Text size="sm">
-              检测到 {validationResult.invalidTileIds.length} 块瓦片存在搭接约束违规，已用红色高亮显示。请调整相关瓦片位置或重置到原始位置。
+              检测到 {validationResult.invalidTileIds.length}{' '}
+              块瓦片存在搭接约束违规，已用红色高亮显示。请调整相关瓦片位置或重置到原始位置。
             </Text>
           </Alert>
         </Card.Section>
@@ -457,7 +440,10 @@ export default function RoofCanvas() {
         </Card.Section>
       )}
 
-      <Card.Section ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 400 }}>
+      <Card.Section
+        ref={containerRef}
+        style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 400 }}
+      >
         <Stage
           ref={stageRef}
           width={stageSize.width}
@@ -484,8 +470,10 @@ export default function RoofCanvas() {
             {layout.tiles.map((tile) => {
               const numbering = numberingResult.numberingMap[tile.id];
               const fontSize = Math.max(8, Math.min(tile.width / 6, 14));
-              const selected = isSelected(tile.id);
+              const selected = highlight.isTileSelected(tile.id);
               const isDraggable = selectionMode === 'single' && selected;
+              const colors = highlight.getTileColors(tile);
+
               return (
                 <React.Fragment key={tile.id}>
                   <Rect
@@ -493,16 +481,18 @@ export default function RoofCanvas() {
                     y={tile.y}
                     width={tile.width}
                     height={tile.height}
-                    fill={getTileFill(tile)}
-                    stroke={getTileStroke(tile)}
-                    strokeWidth={getTileStrokeWidth(tile)}
+                    fill={colors.fill}
+                    stroke={colors.stroke}
+                    strokeWidth={colors.strokeWidth}
                     draggable={isDraggable}
                     onClick={(e) => handleTileClick(tile, e)}
                     onMouseEnter={() => setFocusedTile(tile.id)}
-                    onMouseLeave={() => focusedTileId === tile.id && setFocusedTile(null)}
+                    onMouseLeave={() =>
+                      focusedTileId === tile.id && setFocusedTile(null)
+                    }
                     onDragEnd={(e) => handleDragEnd(e, tile)}
-                    shadowColor={getTileShadowColor(tile)}
-                    shadowBlur={validationResult.invalidTileIds.includes(tile.id) || highlightedTileIds.has(tile.id) || tile.id === focusedTileId ? 8 : 2}
+                    shadowColor={colors.shadowColor}
+                    shadowBlur={colors.shadowBlur}
                     shadowOffsetX={1}
                     shadowOffsetY={1}
                   />
@@ -554,12 +544,12 @@ export default function RoofCanvas() {
               );
             })}
 
-            {selectedTileId && selectionMode === 'single' && (
+            {selectedTile && selectionMode === 'single' && (
               <Rect
-                x={layout.tiles.find((t) => t.id === selectedTileId)?.x ?? 0}
-                y={layout.tiles.find((t) => t.id === selectedTileId)?.y ?? 0}
-                width={layout.tiles.find((t) => t.id === selectedTileId)?.width ?? 0}
-                height={layout.tiles.find((t) => t.id === selectedTileId)?.height ?? 0}
+                x={selectedTile.x}
+                y={selectedTile.y}
+                width={selectedTile.width}
+                height={selectedTile.height}
                 stroke="#3b82f6"
                 strokeWidth={3}
                 dash={[5, 5]}
@@ -591,9 +581,10 @@ export default function RoofCanvas() {
             {selectionMode === 'multi' && '点击瓦片切换选择状态，支持多选'}
             {selectionMode === 'box' && '在空白处按住鼠标拖动画框选择瓦片'}
           </Text>
-          {selectedTileIds.length > 0 && selectionMode !== 'single' && (
+          {highlight.selectionContext.selectedCount > 0 && selectionMode !== 'single' && (
             <Badge size="sm" variant="light" color="blue">
-              已选 {selectedTileIds.length} / {layout.tiles.length}
+              已选 {highlight.selectionContext.selectedCount} /{' '}
+              {highlight.selectionContext.totalCount}
             </Badge>
           )}
         </MantineGroup>
@@ -601,3 +592,5 @@ export default function RoofCanvas() {
     </Card>
   );
 }
+
+void IconSelectAll;
